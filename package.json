@@ -1,0 +1,22 @@
+{
+  "name": "readcast",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "shared",
+    "pipeline",
+    "worker",
+    "web"
+  ],
+  "scripts": {
+    "check": "tsc -p shared && tsc -p pipeline && tsc -p worker && tsc -p web",
+    "test": "node --import tsx --test shared/test/*.test.ts pipeline/test/*.test.ts",
+    "zugang": "node --import tsx scripts/zugang.ts",
+    "mock": "node --import tsx scripts/mock-api.ts",
+    "geheimnis": "node --import tsx scripts/geheimnis.ts"
+  },
+  "devDependencies": {
+    "tsx": "4.23.15",
+    "typescript": "5.9.3"
+  }
+}

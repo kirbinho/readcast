@@ -1,0 +1,64 @@
+name: Worker veröffentlichen
+
+on:
+  push:
+    branches: [main]
+    paths: ['worker/**', 'shared/**', 'package-lock.json', '.github/workflows/worker.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: worker
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+        working-directory: .
+      - name: Datenbank-Kennung eintragen
+        env:
+          D1_ID: ${{ vars.D1_DATABASE_ID }}
+        run: |
+          test -n "$D1_ID" || { echo "Repository-Variable D1_DATABASE_ID fehlt"; exit 1; }
+          sed -i "s/00000000-0000-0000-0000-000000000000/$D1_ID/" wrangler.toml
+      - name: Tabellen anlegen (ändert nichts, wenn es sie schon gibt)
+        run: npx wrangler d1 execute readcast --remote --file=schema.sql
+      - name: Veröffentlichen
+        env:
+          ORIGIN: https://${{ github.repository_owner }}.github.io
+          REPO: ${{ github.repository }}
+        run: npx wrangler deploy --var "ALLOWED_ORIGIN:$ORIGIN" --var "GITHUB_REPO:$REPO"
+      - name: Geheimnisse übertragen
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          DISPATCH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
+          PIPELINE_SECRET: ${{ secrets.PIPELINE_SECRET }}
+          TOKEN_SECRET: ${{ secrets.TOKEN_SECRET }}
+        run: |
+          umask 077
+          node -e '
+            const e = process.env;
+            const s = { ANTHROPIC_API_KEY: e.ANTHROPIC_API_KEY, NOTION_TOKEN: e.NOTION_TOKEN, GITHUB_TOKEN: e.DISPATCH_TOKEN, PIPELINE_SECRET: e.PIPELINE_SECRET, TOKEN_SECRET: e.TOKEN_SECRET };
+            const missing = Object.entries(s).filter(([, v]) => !v).map(([k]) => k);
+            if (missing.length) { console.error("Fehlende Geheimnisse: " + missing.join(", ")); process.exit(1); }
+            require("fs").writeFileSync("/tmp/secrets.json", JSON.stringify(s));
+          '
+          npx wrangler secret bulk /tmp/secrets.json
+          rm -f /tmp/secrets.json

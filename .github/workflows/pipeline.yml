@@ -1,0 +1,40 @@
+name: Folge auslesen
+
+# Wird vom Worker gestartet, nie von Hand und nie durch Pull Requests.
+# Die Protokolle sind öffentlich: Die Pipeline schreibt nur Schritte und Zahlen hinein, keine Inhalte.
+
+on:
+  workflow_dispatch:
+    inputs:
+      job:
+        description: Auftragsnummer
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pipeline-${{ inputs.job }}
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Auslesen
+        env:
+          JOB: ${{ inputs.job }}
+          READCAST_API_URL: ${{ vars.READCAST_API_URL }}
+          PIPELINE_SECRET: ${{ secrets.PIPELINE_SECRET }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ASSEMBLYAI_API_KEY: ${{ secrets.ASSEMBLYAI_API_KEY }}
+          READCAST_MODEL: ${{ vars.READCAST_MODEL }}
+        run: npx tsx pipeline/src/index.ts "$JOB"

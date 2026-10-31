@@ -1,0 +1,21 @@
+# Cloudflare Worker: Zugang, Speicher, Fragen an die Folge, Notion, Budget.
+# Geheimnisse liegen nicht hier, sondern werden mit `wrangler secret put` gesetzt (siehe docs/EINRICHTUNG.md).
+name = "readcast-api"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[vars]
+# Adresse der Web-App auf GitHub Pages, ohne Pfad. Nur von dort sind Anfragen erlaubt.
+ALLOWED_ORIGIN = "https://DEIN-GITHUB-NAME.github.io"
+# Repository, in dem die Pipeline läuft
+GITHUB_REPO = "DEIN-GITHUB-NAME/readcast"
+CAP_EUR = "10"
+EUR_PER_USD = "0.92"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "readcast"
+# Wird bei der Einrichtung mit `wrangler d1 create readcast` erzeugt und hier eingetragen
+database_id = "00000000-0000-0000-0000-000000000000"
