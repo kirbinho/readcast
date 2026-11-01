@@ -61,8 +61,9 @@ export async function transcribe(meta: EpisodeMeta, onWait: (elapsedSec: number)
       speech_models: ['universal-3-5-pro', 'universal-2'],
       language_detection: true,
       speaker_labels: true,
-      // Obergrenze über vier, damit eine fünfte Stimme erkannt und die Folge abgelehnt werden kann
-      speaker_options: { min_speakers_expected: 1, max_speakers_expected: 6 },
+      // Eine harte Obergrenze: Weitere Stimmen würden anderen zugeschlagen. Sie liegt deshalb deutlich über vier,
+      // damit eingespielte Stimmen nicht dem Host zugeschrieben werden.
+      speaker_options: { min_speakers_expected: 1, max_speakers_expected: 8 },
       keyterms_prompt: keyterms(meta),
       format_text: true,
       punctuate: true,

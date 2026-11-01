@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { toSegments, voiceStats } from '../src/segments.ts';
-import { mergeSameNames } from '../src/speakers.ts';
+import { decideRole, mergeSameNames } from '../src/speakers.ts';
 import type { Utterance } from '../src/transcribe.ts';
 
 test('lange Äußerungen werden an Satzenden geschnitten', () => {
@@ -34,4 +34,20 @@ test('zwei Kennungen mit demselben Namen werden eine Stimme', () => {
   ]);
   assert.equal(r.speakers.length, 1);
   assert.ok(r.segments.every((s) => s.spk === 'A'));
+});
+
+test('Einspieler zählen nicht als Gesprächspartner', () => {
+  const v = (shortTurns: number, significant = true) => ({ label: 'B', ms: 1, share: 0.1, significant, turns: shortTurns, shortTurns });
+  assert.equal(decideRole(v(0), true, 'sonstige'), 'host', 'die lauteste Stimme führt durch die Folge');
+  assert.equal(decideRole(v(1), false, 'sonstige'), 'sonstige', 'Konferenzredner');
+  assert.equal(decideRole(v(1), false, 'gast'), 'sonstige', 'kein Wechsel im Gespräch, also kein Gast');
+  assert.equal(decideRole(v(12), false, 'gast'), 'gast', 'echter Gesprächspartner');
+  assert.equal(decideRole(v(12, false), false, 'gast'), 'sonstige', 'zu wenig Sprechzeit');
+});
+
+test('Kurze Wechsel werden gezählt, lange Blöcke nicht', () => {
+  const seg = (spk: string, start: number, end: number) => ({ speaker: spk, text: spk, start, end, words: [] });
+  const stats = voiceStats(toSegments([seg('A', 0, 300_000), seg('B', 300_000, 345_000), seg('A', 345_000, 600_000), seg('C', 600_000, 610_000), seg('A', 610_000, 620_000), seg('C', 620_000, 630_000)]));
+  assert.equal(stats.find((s) => s.label === 'B')?.shortTurns, 0);
+  assert.equal(stats.find((s) => s.label === 'C')?.shortTurns, 2);
 });

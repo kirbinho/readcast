@@ -19,7 +19,9 @@ function tabsFor(ep: EpisodeView): Tab[] {
   const tabs: Tab[] = [{ id: 'uebersicht', label: 'Übersicht', mode: null }];
   if (ep.status === 'zu_viele' || ep.status === 'budget' || ep.status === 'fehler') return tabs;
   tabs.push({ id: 'essenz', label: 'Essenz', mode: 'essenz' }, { id: 'zehn', label: '10 O-Töne', mode: 'zehn' });
-  for (const v of voicesOf(ep)) tabs.push({ id: `p-${v.label}`, label: v.short, mode: `p:${v.label}` });
+  // Pro Person nur, wenn wirklich mehrere miteinander sprechen. Einspieler zählen nicht.
+  const voices = voicesOf(ep);
+  if (voices.length >= 2) for (const v of voices) tabs.push({ id: `p-${v.label}`, label: v.short, mode: `p:${v.label}` });
   tabs.push({ id: 'frag', label: 'Frag die Folge', mode: 'frag' });
   return tabs;
 }

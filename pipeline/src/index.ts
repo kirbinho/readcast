@@ -11,7 +11,7 @@ import * as report from './report.ts';
 import { NotFoundError, resolveEpisode } from './resolve.ts';
 import { pickQuotes, scoreTopics } from './salience.ts';
 import { toSegments, voiceStats } from './segments.ts';
-import { mergeSameNames, nameSpeakers } from './speakers.ts';
+import { displayName, mergeSameNames, nameSpeakers } from './speakers.ts';
 import { mergeTopics } from './topics.ts';
 import { transcribe } from './transcribe.ts';
 import { verifyEssenz, verifyItems } from './verify.ts';
@@ -92,6 +92,8 @@ async function run() {
     return { ...s, shareOfTalk: v?.share ?? s.shareOfTalk, role: v && !v.significant ? 'sonstige' : s.role };
   });
   const voices = speakers.filter((s) => s.role !== 'sonstige');
+  // Führt nur eine Person durch die Folge, heißt sie ohne Namen schlicht „Host“
+  if (voices.length === 1 && !voices[0].name) voices[0].short = 'Host';
   log(`${voices.length} Stimmen`);
   if (voices.length > MAX_VOICES) {
     await report.progress(jobId, { status: 'zu_viele', progress: 100, costUsd: cost(), speakers, speakerCount: voices.length });
@@ -100,7 +102,7 @@ async function run() {
   }
   await report.progress(jobId, { status: 'liest', progress: 58, costUsd: cost(), etaSec: 200, speakers, speakerCount: voices.length });
 
-  const names = Object.fromEntries(speakers.map((s) => [s.label, s.name ?? `Stimme ${s.label}`]));
+  const names = Object.fromEntries(speakers.map((s) => [s.label, displayName(s)]));
 
   log('Lese Abschnitte');
   const wins = await extractAll(meta, segments, speakers);
@@ -117,23 +119,25 @@ async function run() {
 
   log('Schreibe Auswertungen');
   const quotes = wins.flatMap((w) => w.quotes);
-  const [essenzRaw, ...people] = await Promise.all([
+  // Die Sicht pro Person lohnt sich nur, wenn mehrere miteinander sprechen
+  const people = voices.length >= 2 ? voices : [];
+  const [essenzRaw, ...written] = await Promise.all([
     writeEssenz(sel.main, sel.shorts, segments, names),
-    ...voices.map((v) => writePerson(v, sel.scored, quotes, segments, names)),
+    ...people.map((v) => writePerson(v, sel.scored, quotes, segments, names)),
   ]);
   await report.progress(jobId, { status: 'schreibt', progress: 92, costUsd: cost(), etaSec: 40 });
 
   log('Prüfe gegen das Transkript');
   const [essenz, ...checkedPeople] = await Promise.all([
     verifyEssenz(essenzRaw, segments, names),
-    ...people.map((p, i) => verifyItems(`Person ${i + 1}`, p.blocks, segments, names)),
+    ...written.map((p, i) => verifyItems(`Person ${i + 1}`, p.blocks, segments, names)),
   ]);
 
   const segStart = new Map(segments.map((s) => [s.id, s.start]));
   const results: Results = {
     essenz,
     zehn: pickQuotes(quotes, segments).map((q) => ({ text: q.text, spk: q.spk, ts: segStart.get(q.seg) ?? 0 })),
-    personen: Object.fromEntries(voices.map((v, i) => [v.label, { blocks: checkedPeople[i] }])),
+    personen: Object.fromEntries(people.map((v, i) => [v.label, { blocks: checkedPeople[i] }])),
   };
 
   log('Stufe für Notion ein');

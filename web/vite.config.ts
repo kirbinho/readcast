@@ -18,6 +18,7 @@ function contentSecurityPolicy(): Plugin {
         'font-src https://fonts.gstatic.com',
         "img-src 'self' https: data:",
         `connect-src ${api}`,
+        "manifest-src 'self'",
         "base-uri 'none'",
         "form-action 'none'",
       ].join('; ');

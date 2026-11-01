@@ -25,6 +25,7 @@ export const WRITING_RULES = `Schreibregeln:
 - Nur, was in der Folge gesagt wurde. Keine eigenen Schlüsse, keine Einordnung von außen, kein Weltwissen, keine Wertung.
 - Meinungen und Prognosen bleiben als solche erkennbar und werden der Person zugeschrieben („Klöckner erwartet …“). Fakten, die jemand nennt, gibst du als seine Aussage wieder, nicht als geprüfte Tatsache.
 - Zahlen, Namen und Daten exakt wie im Material.
+- „Einspieler“ sind eingeblendete O-Töne, keine Gesprächspartner. Schreib „in einem Einspieler heißt es“ oder nenne den Namen, falls ihn das Material nennt. Schreib nie „Stimme A“ oder Ähnliches, wenn es sich vermeiden lässt.
 - Überschriften sind Aussagen, keine Etiketten: „Microsoft spart beim Rechenzentrumsausbau“ statt „Microsoft“. Höchstens 90 Zeichen.
 - Sachlich, klar, aktiv. Keine Füllsätze, keine Einleitungen wie „In diesem Abschnitt …“.
 - Deutsch, auch wenn das Gespräch englisch ist.

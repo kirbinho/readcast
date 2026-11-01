@@ -31,7 +31,7 @@ function samplesFor(label: string, segments: Segment[]): Segment[] {
 export async function nameSpeakers(meta: EpisodeMeta, segments: Segment[], stats: VoiceStat[]): Promise<Speaker[]> {
   const opening = segments.filter((s) => s.start < 240_000);
   const perVoice = stats
-    .map((v) => `Stimme ${v.label} (${Math.round(v.share * 100)} % Sprechzeit):\n${renderTranscript(samplesFor(v.label, segments), {})}`)
+    .map((v) => `Stimme ${v.label} (${Math.round(v.share * 100)} % Sprechzeit, ${v.turns} Redebeiträge, davon ${v.shortTurns} kurze):\n${renderTranscript(samplesFor(v.label, segments), {})}`)
     .join('\n\n');
 
   const res = await callJson({
@@ -45,7 +45,13 @@ Regeln:
 - Vergib einen Namen nur, wenn er in den Shownotes, im Feed, im Folgentitel oder im Gespräch steht und klar dieser Stimme gehört (sie stellt sich vor, wird mit Namen angesprochen oder begrüßt, oder die Shownotes nennen genau diese Rolle).
 - Rate nie. Ohne klaren Beleg: name = null, quelle = "keine".
 - beleg: die Fundstelle wörtlich, kurz.
-- rolle: host für Moderation, gast für Gäste, sonstige für Werbesprecher, Jingles, Einspieler.
+- rolle: Entscheidend ist, wer wirklich an diesem Gespräch teilnimmt.
+  host: führt durch die Folge. Steht in den Shownotes nur ein Host, gibt es genau einen.
+  gast: spricht im selben Gespräch mit dem Host, antwortet und wird angesprochen.
+  sonstige: alles, was nur eingeblendet oder eingespielt wird und nicht am Gespräch teilnimmt: Konferenzredner, O-Töne, Interviewausschnitte und Archivmaterial, Nachrichten, Zitate von Sprechern, Werbesprecher, Jingles.
+  Viele Stimmen mit wenigen, längeren Beiträgen, die der Host einordnet, sind Einspieler und keine Gäste. Im Zweifel sonstige.
+- Wer in den Shownotes nur zur Produktion genannt wird, ist keine Stimme.
+- Auch ein Einspieler bekommt nur dann einen Namen, wenn er klar belegt ist.
 - Gib jede Stimme genau einmal zurück, mit ihrem label.`,
     user: [
       `Sendung: ${meta.show}`,
@@ -60,6 +66,7 @@ Regeln:
   const corpus = normalizeForMatch([meta.show, meta.title, meta.feedAuthor ?? '', meta.description, ...segments.map((s) => s.text)].join(' '));
   const byLabel = new Map(res.stimmen.map((s) => [s.label, s]));
 
+  const loudest = stats[0]?.label;
   const speakers: Speaker[] = stats.map((v) => {
     const r = byLabel.get(v.label);
     let name = r?.name?.trim() || null;
@@ -68,11 +75,12 @@ Regeln:
       const last = normalizeForMatch(name).split(' ').filter((t) => t.length >= 3).pop();
       if (!last || !corpus.includes(last)) name = null;
     }
+    const role = decideRole(v, v.label === loudest, r?.rolle);
     return {
       label: v.label,
       name,
-      short: name ?? `Stimme ${v.label}`,
-      role: v.significant ? (r?.rolle ?? 'gast') : 'sonstige',
+      short: name ?? (role === 'sonstige' ? 'Einspieler' : `Stimme ${v.label}`),
+      role,
       source: name ? (r?.quelle ?? null) : null,
       shareOfTalk: v.share,
     };
@@ -86,6 +94,23 @@ Regeln:
     s.short = lastNames.filter((x) => x === ln).length > 1 ? s.name : ln;
   });
   return speakers;
+}
+
+/** So heißt eine Stimme im Text: Name, sonst „Einspieler“ oder „Stimme B“. */
+export function displayName(s: Speaker): string {
+  return s.name ?? (s.role === 'sonstige' ? 'Einspieler' : `Stimme ${s.label}`);
+}
+
+const MIN_SHORT_TURNS = 3;
+
+/**
+ * Gesprächspartner ist nur, wer laut Einschätzung Host oder Gast ist und auch wirklich im Wechsel mit anderen spricht.
+ * Die lauteste Stimme führt immer durch die Folge. Alles andere sind Einspieler: Konferenzredner, O-Töne, Archivmaterial, Werbung.
+ */
+export function decideRole(v: VoiceStat, isLoudest: boolean, modelRole: Speaker['role'] | undefined): Speaker['role'] {
+  if (isLoudest) return modelRole === 'gast' || modelRole === 'host' ? modelRole : 'host';
+  if (!v.significant || (modelRole !== 'host' && modelRole !== 'gast')) return 'sonstige';
+  return v.shortTurns >= MIN_SHORT_TURNS ? modelRole : 'sonstige';
 }
 
 /**

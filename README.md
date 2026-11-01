@@ -4,7 +4,7 @@ Link zu einer Podcastfolge einfügen, egal von welcher Plattform. Readcast sucht
 
 - **Essenz**: die Themen der Folge als Blöcke, so viele, wie die Folge hergibt, dazu Kurzmeldungen
 - **10 O-Töne**: die meinungsstärksten, pointiertesten Sätze, wörtlich und über die ganze Folge verteilt
-- **Pro Stimme**: was jede der höchstens vier Personen sagt, mit Zitat
+- **Pro Person**: was jede der höchstens vier Gesprächspartner sagt, mit Zitat, sobald mehrere miteinander sprechen. Eingeblendete O-Töne zählen nicht als Person
 - **Frag die Folge**: Antworten nur aus dem Transkript, mit Sprecher und Minute
 - **Ab in Notion**: eine Seite pro Folge in der Datenbank „Wissen“, mit den ausgewählten Auswertungen als Blöcke
 

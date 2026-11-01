@@ -41,7 +41,11 @@ export interface VoiceStat {
   ms: number;
   share: number;
   significant: boolean;
+  turns: number; // Redebeiträge
+  shortTurns: number; // kurze Beiträge im Wechsel mit anderen, typisch für ein echtes Gespräch
 }
+
+const SHORT_TURN_MS = 30_000;
 
 /**
  * Eine Stimme zählt, wenn sie mindestens 3 % der Sprechzeit oder 90 Sekunden hat.
@@ -51,8 +55,27 @@ export function voiceStats(segments: Segment[]): VoiceStat[] {
   const ms = new Map<string, number>();
   for (const s of segments) ms.set(s.spk, (ms.get(s.spk) ?? 0) + (s.end - s.start));
   const total = [...ms.values()].reduce((a, b) => a + b, 0) || 1;
+
+  // Aufeinanderfolgende Abschnitte derselben Stimme sind ein Redebeitrag
+  const turns = new Map<string, number>();
+  const shortTurns = new Map<string, number>();
+  for (let i = 0; i < segments.length; ) {
+    let j = i;
+    while (j + 1 < segments.length && segments[j + 1].spk === segments[i].spk) j++;
+    const spk = segments[i].spk;
+    turns.set(spk, (turns.get(spk) ?? 0) + 1);
+    if (segments[j].end - segments[i].start <= SHORT_TURN_MS) shortTurns.set(spk, (shortTurns.get(spk) ?? 0) + 1);
+    i = j + 1;
+  }
   return [...ms.entries()]
-    .map(([label, v]) => ({ label, ms: v, share: v / total, significant: v / total >= 0.03 || v >= 90_000 }))
+    .map(([label, v]) => ({
+      label,
+      ms: v,
+      share: v / total,
+      significant: v / total >= 0.03 || v >= 90_000,
+      turns: turns.get(label) ?? 0,
+      shortTurns: shortTurns.get(label) ?? 0,
+    }))
     .sort((a, b) => b.ms - a.ms);
 }
 

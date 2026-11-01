@@ -116,7 +116,7 @@ const routes: [string, RegExp, Handler][] = [
   ['POST', /^\/internal\/jobs\/([0-9a-f-]{36})\/result$/, async (req, env, [id]) => {
     requirePipeline(req, env);
     const r = await readJson<{ results: Results; speakers: Speaker[]; segments: Segment[]; notionMeta: NotionMeta; costUsd: number }>(req, 20_000_000);
-    const names = Object.fromEntries(r.speakers.map((s) => [s.label, s.name ?? `Stimme ${s.label}`]));
+    const names = Object.fromEntries(r.speakers.map((s) => [s.label, s.name ?? s.short]));
     const transcript = r.segments.map((s) => `[${s.id} | ${formatTs(s.start)} | ${names[s.spk] ?? s.spk}] ${s.text}`).join('\n');
     const segIndex = r.segments.map((s) => [s.id, s.start, s.spk]);
     await env.DB.prepare(

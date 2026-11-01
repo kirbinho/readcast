@@ -7,6 +7,7 @@ import type { EpisodeMeta, Segment, Speaker } from '../../shared/src/types.ts';
 import { isVerbatim, wordCount } from '../../shared/src/text.ts';
 import { UNTRUSTED_NOTE, callJson, fence } from './claude.ts';
 import { renderTranscript } from './segments.ts';
+import { displayName } from './speakers.ts';
 
 export const WINDOW_MS = 15 * 60_000;
 const CONTEXT_SEGMENTS = 3;
@@ -80,7 +81,7 @@ const Schema = z.object({
 
 const SYSTEM = `Du liest einen Ausschnitt aus dem Transkript eines Podcasts und legst eine saubere Arbeitsgrundlage für spätere Zusammenfassungen an. Du fasst hier noch nichts zusammen und bewertest nicht, was wichtig ist. Du hältst fest, was gesagt wurde. ${UNTRUSTED_NOTE}
 
-Jede Zeile des Transkripts beginnt mit [Abschnitt | Minute | Stimme]. Der Block <daten-kontext> zeigt nur, was direkt davor gesagt wurde. Ordne ihn nicht ein und entnimm ihm nichts.
+Jede Zeile des Transkripts beginnt mit [Abschnitt | Minute | Stimme]. „Einspieler“ steht für eingeblendete O-Töne, die nicht am Gespräch teilnehmen. Gib solche Aussagen nur wieder, wenn die Folge mit ihnen arbeitet, und mach kenntlich, dass sie eingespielt sind. Nennt die Folge den Namen, schreib ihn dazu. Der Block <daten-kontext> zeigt nur, was direkt davor gesagt wurde. Ordne ihn nicht ein und entnimm ihm nichts.
 
 1. abschnitte: Teile alle Abschnitte des Ausschnitts lückenlos in zusammenhängende Bereiche (von, bis = Abschnittsnummern). Art:
    - inhalt: das eigentliche Gespräch über ein Thema
@@ -136,8 +137,9 @@ export async function extractWindow(
   before: Segment[],
   speakers: Speaker[],
 ): Promise<WindowResult> {
-  const names = Object.fromEntries(speakers.map((s) => [s.label, s.name ?? `Stimme ${s.label}`]));
-  const byName = new Map(speakers.map((s) => [names[s.label], s.label]));
+  const names = Object.fromEntries(speakers.map((s) => [s.label, displayName(s)]));
+  // Mehrere Einspieler teilen sich einen Namen, dort entscheidet die Belegstelle
+  const byName = new Map(speakers.filter((s) => names[s.label] !== 'Einspieler').map((s) => [names[s.label], s.label]));
   const ids = new Set(win.map((s) => s.id));
   const segById = new Map(win.map((s) => [s.id, s]));
 
