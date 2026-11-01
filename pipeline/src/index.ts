@@ -38,6 +38,13 @@ async function run() {
   await report.progress(jobId, { status: 'sucht', progress: 3, costUsd: 0 });
 
   const meta = await resolveEpisode(job.link);
+  // Dieselbe Folge über einen anderen Link kostet nicht noch einmal
+  const { duplicateOf } = await report.checkDuplicate(jobId, { audioBase: meta.audioUrl.split('?')[0], feedUrl: meta.feedUrl, title: meta.title });
+  if (duplicateOf) {
+    log('Folge liegt schon vor');
+    return;
+  }
+
   if ((meta.durationSec ?? 0) > MAX_EPISODE_SEC) {
     await report.fail(jobId, { status: 'fehler', error: TOO_LONG_TEXT, costUsd: 0 });
     return;

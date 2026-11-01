@@ -8,7 +8,7 @@ import { login, requirePipeline, requireUser } from './auth.ts';
 import { dispatchPipeline } from './github.ts';
 import { HttpError, type Env, cors, json, now, readJson } from './http.ts';
 import { save, undo } from './notion.ts';
-import { budget, getRow, normalizeLink, recents, reserve, settleCost, view } from './store.ts';
+import { budget, getRow, markDuplicate, normalizeLink, recents, reserve, settleCost, view } from './store.ts';
 
 type Handler = (req: Request, env: Env, params: string[]) => Promise<Response>;
 
@@ -105,6 +105,12 @@ const routes: [string, RegExp, Handler][] = [
       p.speakers ? JSON.stringify(p.speakers) : null, p.speakerCount ?? null, now(), id).run();
     await settleCost(env, id, p.costUsd ?? 0);
     return json(env, { ok: true });
+  }],
+
+  ['POST', /^\/internal\/jobs\/([0-9a-f-]{36})\/duplicate$/, async (req, env, [id]) => {
+    requirePipeline(req, env);
+    const d = await readJson<{ audioBase: string; feedUrl: string; title: string }>(req);
+    return json(env, { duplicateOf: await markDuplicate(env, id, d.audioBase, d.feedUrl, d.title) });
   }],
 
   ['POST', /^\/internal\/jobs\/([0-9a-f-]{36})\/reserve$/, async (req, env, [id]) => {

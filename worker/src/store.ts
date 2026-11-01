@@ -74,7 +74,9 @@ export async function view(env: Env, row: EpisodeRow): Promise<EpisodeView> {
     status: row.status,
     progress: row.progress,
     etaSec: row.eta_sec,
-    error: row.error,
+    // Bei doppelten Folgen steht im Fehlerfeld die Nummer des vorhandenen Eintrags
+    error: row.status === 'doppelt' ? null : row.error,
+    duplicateOf: row.status === 'doppelt' ? row.error : null,
     meta: row.meta ? JSON.parse(row.meta) : null,
     speakers: row.speakers ? JSON.parse(row.speakers) : [],
     speakerCount: row.speaker_count,
@@ -150,6 +152,26 @@ export async function budget(env: Env): Promise<Budget & { spentUsd: number; cap
     capUsd: c.capUsd,
     availableUsd: c.capUsd - spentUsd - (row?.reserved ?? 0),
   };
+}
+
+/**
+ * Sucht einen früheren Eintrag derselben Person zur selben Folge, egal über welchen Link er kam:
+ * gleiche Audiodatei, oder gleicher Feed und gleicher Titel, falls die Audio-Adresse wechselt.
+ * Wird einer gefunden, verweist dieser Auftrag darauf und läuft nicht weiter.
+ */
+export async function markDuplicate(env: Env, id: string, audioBase: string, feedUrl: string, title: string): Promise<string | null> {
+  const hit = await env.DB.prepare(
+    `SELECT e.id FROM episodes e, episodes me
+     WHERE me.id = ?1 AND e.user_id = me.user_id AND e.id <> me.id AND e.created_at < me.created_at
+       AND (e.status = 'fertig' OR (e.status IN ${RUNNING_SQL} AND e.updated_at > ?5))
+       AND (json_extract(e.meta, '$.audioUrl') = ?2
+         OR substr(json_extract(e.meta, '$.audioUrl'), 1, length(?2) + 1) = ?2 || '?'
+         OR (json_extract(e.meta, '$.feedUrl') = ?3 AND json_extract(e.meta, '$.title') = ?4))
+     ORDER BY e.created_at LIMIT 1`,
+  ).bind(id, audioBase, feedUrl, title, staleCutoff()).first<{ id: string }>();
+  if (!hit) return null;
+  await env.DB.prepare("UPDATE episodes SET status = 'doppelt', error = ?, progress = 100, updated_at = ? WHERE id = ?").bind(hit.id, now(), id).run();
+  return hit.id;
 }
 
 /**

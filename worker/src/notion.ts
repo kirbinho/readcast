@@ -3,7 +3,7 @@
 
 import type { Block, EpisodeMeta, ModeKey, NotionMeta, QaEntry, Results, Speaker } from '../../shared/src/types.ts';
 import { formatTs } from '../../shared/src/text.ts';
-import { FREIGABE_THEMEN, WISSEN_DATA_SOURCE_ID } from '../../shared/src/wissen.ts';
+import { FREIGABE_THEMEN, WISSEN_DATA_SOURCE_ID, keepExistingProperties } from '../../shared/src/wissen.ts';
 import { HttpError, type Env } from './http.ts';
 import type { EpisodeRow } from './store.ts';
 
@@ -140,13 +140,17 @@ export async function save(env: Env, row: EpisodeRow, modes: ModeKey[], qa: QaEn
   const children = add.flatMap((m) => modeBlocks(m, results, speakers, qa));
 
   if (!row.notion_page_id) {
-    const head: NBlock[] = nm.kernaussagen.length
+    // Felder wie Haltbarkeit können in Notion wegfallen. Mit ihnen entfällt auch der Kernaussagen-Block, der darauf aufbaut.
+    const schema = await notion<{ properties: Record<string, unknown> }>(env, 'GET', `/data_sources/${WISSEN_DATA_SOURCE_ID}`);
+    const { kept, dropped } = keepExistingProperties(properties(meta, nm, speakers, row.link, add), Object.keys(schema.properties));
+    if (dropped.length) console.error(`Felder fehlen in Wissen: ${dropped.join(', ')}`);
+    const head: NBlock[] = nm.kernaussagen.length && 'Haltbarkeit' in schema.properties
       ? [h2('Kernaussagen'), ...nm.kernaussagen.map((k) => p({ text: `[${k.marker}] ${k.text}` }))]
       : [];
     const all = [...head, ...children];
     const page = await notion<{ id: string; url: string }>(env, 'POST', '/pages', {
       parent: { type: 'data_source_id', data_source_id: WISSEN_DATA_SOURCE_ID },
-      properties: properties(meta, nm, speakers, row.link, add),
+      properties: kept,
       children: all.slice(0, 100),
     });
     for (let i = 100; i < all.length; i += 100) {

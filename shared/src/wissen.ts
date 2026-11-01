@@ -34,6 +34,18 @@ export const HALTBARKEITEN = ['Prinzip', 'Praxis', 'Stand', 'Prognose'] as const
 /** Freigabe Arbeit: gesetzt, sobald eines dieser Themen dabei ist (Regel aus dem Notion-Skill). */
 export const FREIGABE_THEMEN = ['KI & Technologie', 'Medien & Journalismus', 'Marketing & Kommunikation'];
 
+/** Schreibt nur Felder, die es in der Datenbank gerade gibt. So bricht die Ablage nicht ab, wenn sich Felder in Notion ändern. */
+export function keepExistingProperties<T>(props: Record<string, T>, existing: Iterable<string>): { kept: Record<string, T>; dropped: string[] } {
+  const names = new Set(existing);
+  const kept: Record<string, T> = {};
+  const dropped: string[] = [];
+  for (const [name, value] of Object.entries(props)) {
+    if (names.has(name)) kept[name] = value;
+    else dropped.push(name);
+  }
+  return { kept, dropped };
+}
+
 /** Die Regeln, nach denen die Pipeline die Felder einstuft. Wörtlich aus dem Notion-Skill übernommen und gekürzt. */
 export const EINSTUFUNGSREGELN = `
 - Titel: maximal 60 Zeichen, maximale Aussagekraft. Gute Titel sind Aussagen, keine Etiketten.

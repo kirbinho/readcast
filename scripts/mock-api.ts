@@ -55,6 +55,7 @@ const mk = (id: string, ready: boolean): EpisodeView & { startedAt: number } => 
   progress: ready ? 100 : 0,
   etaSec: null,
   error: null,
+  duplicateOf: null,
   meta: ready ? meta : null,
   speakers: ready ? speakers : [],
   speakerCount: ready ? 2 : null,

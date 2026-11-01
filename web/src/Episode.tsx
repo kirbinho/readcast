@@ -80,6 +80,7 @@ export function Episode({ id, tab, onAuthLost }: { id: string; tab: string; onAu
       try {
         const next = await api.episode(id);
         if (!alive) return;
+        if (next.duplicateOf) return go(next.duplicateOf, 'uebersicht', true);
         setEp(next);
         if (LAUFEND.includes(next.status)) timer = window.setTimeout(load, next.status === 'hoert' ? 5000 : 3000);
       } catch (e) {

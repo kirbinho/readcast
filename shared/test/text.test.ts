@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { keepExistingProperties } from '../src/wissen.ts';
 import { formatTs, htmlToText, isVerbatim, normalizeForMatch, safeUrl } from '../src/text.ts';
 
 test('Zeitstempel', () => {
@@ -28,4 +29,10 @@ test('nur Web-Links', () => {
   assert.ok(safeUrl('https://example.com/a'));
   assert.equal(safeUrl('javascript:alert(1)'), null);
   assert.equal(safeUrl('kein link'), null);
+});
+
+test('Nur vorhandene Notion-Felder werden geschrieben', () => {
+  const r = keepExistingProperties({ Titel: 1, Haltbarkeit: 2, Haltbarkeitsnotiz: 3 }, ['Titel', 'Thema']);
+  assert.deepEqual(r.kept, { Titel: 1 });
+  assert.deepEqual(r.dropped, ['Haltbarkeit', 'Haltbarkeitsnotiz']);
 });

@@ -9,6 +9,7 @@ export type Status =
   | 'fertig'
   | 'nicht_gefunden' // kein öffentlicher Feed zur Folge
   | 'zu_viele' // mehr als vier Stimmen
+  | 'doppelt' // dieselbe Folge liegt schon vor, siehe duplicateOf
   | 'budget' // Monatsbudget reicht nicht
   | 'fehler';
 
@@ -115,6 +116,7 @@ export interface EpisodeView {
   progress: number; // 0–100
   etaSec: number | null;
   error: string | null;
+  duplicateOf: string | null;
   meta: EpisodeMeta | null;
   speakers: Speaker[];
   speakerCount: number | null;

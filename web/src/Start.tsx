@@ -41,6 +41,8 @@ export function Start({ onAuthLost }: { onAuthLost: () => void }) {
         if (ep.status === 'wartet' || ep.status === 'sucht') {
           setStatus(statusLine(ep));
           setTimeout(tick, 2000);
+        } else if (ep.duplicateOf) {
+          go(ep.duplicateOf);
         } else if (ep.status === 'nicht_gefunden' || ep.status === 'budget' || ep.status === 'fehler') {
           setPending(null);
           setError(ERRORS[ep.status] ?? ep.error ?? 'Da ist etwas schiefgegangen.');

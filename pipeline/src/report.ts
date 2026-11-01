@@ -27,6 +27,10 @@ export const progress = (
   p: { status: Status; progress: number; costUsd: number; etaSec?: number | null; meta?: EpisodeMeta; speakers?: Speaker[]; speakerCount?: number },
 ) => call<{ ok: true }>(`/jobs/${id}/progress`, p);
 
+/** Fragt, ob diese Folge schon ausgelesen wurde. Wenn ja, ist der Auftrag damit erledigt. */
+export const checkDuplicate = (id: string, d: { audioBase: string; feedUrl: string; title: string }) =>
+  call<{ duplicateOf: string | null }>(`/jobs/${id}/duplicate`, d);
+
 /** Reserviert die Höchstkosten dieser Folge. ok = false heißt: Das Monatsbudget reicht nicht. */
 export const reserve = (id: string, ceilingUsd: number) => call<{ ok: boolean }>(`/jobs/${id}/reserve`, { ceilingUsd });
 
