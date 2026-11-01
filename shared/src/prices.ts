@@ -1,7 +1,7 @@
 // Preise in US-Dollar. Stand 31.10.2026, bei Änderungen hier anpassen.
 // Claude: platform.claude.com/pricing · AssemblyAI: assemblyai.com/pricing
 
-export const CLAUDE_MODEL = 'claude-opus-5-5';
+export const CLAUDE_MODEL = 'claude-sonnet-5-5';
 
 export const CLAUDE_PRICES: Record<string, { input: number; output: number; cacheWrite: number; cacheRead: number }> = {
   // Dollar pro Million Token
@@ -13,7 +13,7 @@ export const CLAUDE_PRICES: Record<string, { input: number; output: number; cach
 export const TRANSCRIPTION_USD_PER_HOUR = 0.23;
 
 /** Grobe Schätzung für die Auswertung pro Audiostunde, für die Budgetprüfung vor dem Start. */
-export const ANALYSIS_USD_PER_HOUR_ESTIMATE = 0.9;
+export const ANALYSIS_USD_PER_HOUR_ESTIMATE = 0.45;
 
 export interface Usage {
   input_tokens: number;
@@ -23,7 +23,8 @@ export interface Usage {
 }
 
 export function claudeCostUsd(model: string, u: Usage): number {
-  const p = CLAUDE_PRICES[model] ?? CLAUDE_PRICES[CLAUDE_MODEL];
+  // Antwortet nach einer Ablehnung ein anderes Modell, lieber zu hoch als zu niedrig verbuchen
+  const p = CLAUDE_PRICES[model] ?? CLAUDE_PRICES['claude-opus-5-5'];
   return (
     (u.input_tokens * p.input +
       u.output_tokens * p.output +

@@ -21,7 +21,7 @@ Browser ──► GitHub Pages (web/)            die App, nur statische Dateien
             GitHub Actions (pipeline/)     Feed finden, transkribieren, auswerten
                 │  nutzt
                 ├─ AssemblyAI              Transkript mit Sprechererkennung
-                └─ Claude (Opus 5.5)       Lesen, Gewichten, Schreiben, Prüfen
+                └─ Claude (Sonnet 5.5)     Lesen, Gewichten, Schreiben, Prüfen
 ```
 
 Alle Schlüssel liegen als Geheimnisse bei GitHub und Cloudflare, nie im Code und nie im Browser.
@@ -32,10 +32,12 @@ Monatsgrenze: 10 € (`CAP_EUR` in `worker/wrangler.toml`). Vor jeder Folge prü
 
 Grobe Schätzung pro Folge, noch nicht an echten Folgen gemessen:
 
-| Länge | Transkription | Auswertung (Claude Opus 5.5) | Zusammen |
+| Länge | Transkription | Auswertung (Claude Sonnet 5.5) | Zusammen |
 |---|---|---|---|
-| 20 Minuten | 0,08 $ | ca. 0,30 $ | ca. 0,40 $ |
-| 90 Minuten | 0,35 $ | ca. 1,00–1,30 $ | ca. 1,40–1,70 $ |
+| 20 Minuten | 0,08 $ | ca. 0,14 $ | ca. 0,22 $ |
+| 90 Minuten | 0,35 $ | ca. 0,62 $ | ca. 0,97 $ |
+
+Für die Pipeline lässt sich das Modell ohne Codeänderung wechseln: Repository-Variable `READCAST_MODEL`, etwa `claude-opus-5-5`. „Frag die Folge“ nutzt `CLAUDE_MODEL` aus `shared/src/prices.ts`.
 
 GitHub Pages, GitHub Actions (öffentliches Repository), Cloudflare Workers und D1 kosten im Rahmen der kostenlosen Kontingente nichts.
 
