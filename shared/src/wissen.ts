@@ -29,8 +29,6 @@ export const KONTEXTE = ['ZEIT / Beruf', 'Allgemein', 'Privat & Familie', 'varmi
 
 export const EVIDENZGRADE = ['Daten/Fakt', 'Studie', 'Fachmeinung', 'Meinung/Essay', 'Erfahrung'] as const;
 
-export const HALTBARKEITEN = ['Prinzip', 'Praxis', 'Stand', 'Prognose'] as const;
-
 /** Freigabe Arbeit: gesetzt, sobald eines dieser Themen dabei ist (Regel aus dem Notion-Skill). */
 export const FREIGABE_THEMEN = ['KI & Technologie', 'Medien & Journalismus', 'Marketing & Kommunikation'];
 
@@ -54,13 +52,19 @@ export const EINSTUFUNGSREGELN = `
 - Sensibel: setzen bei Gesundheit, Diagnosen, Kinderwunsch und Schwangerschaft, Finanzen und Verträgen der Familie, beruflichen Überlegungen zu Wechsel, Exit oder Verhandlung. Allgemeines Sachwissen zu diesen Themen ist nicht sensibel. Bei einem öffentlichen Podcast fast immer nein.
 - Evidenzgrad: Zahlen und belegte Fakten = Daten/Fakt. Untersuchungen und Reports = Studie. Einschätzung einer qualifizierten Person = Fachmeinung. Kommentare und Meinungen = Meinung/Essay. Eigene Beobachtungen = Erfahrung. Für ein Gespräch meist Fachmeinung oder Meinung/Essay.
 - ZEIT-intern: nur, wenn die Aussagen von einer handelnden Person aus dem ZEIT Verlag stammen (Geschäftsführung, Chefredaktion). Externe Gespräche über die ZEIT zählen nicht. Im Zweifel nein.
-- Haltbarkeit, nur wenn Thema „KI & Technologie“ enthält, sonst null. Sie sagt, wovon eine Aussage abhängt:
-  Prinzip: Konzepte, Denkmodelle, Methodik, Erkenntnisse über Menschen, Organisationen und Ökonomie. Aussagen über Modell- oder Werkzeugverhalten sind nie Prinzip.
-  Praxis: Vorgehensweisen, Governance-Muster, Marktlogik, Rollenbilder, Anbieterstrategien.
-  Stand: Modellfähigkeiten, Preise, Benchmarks, Toolfeatures, Rechtsstände, konkrete Zahlen.
-  Prognose: Aussagen über die Zukunft.
-  Im Zweifel die volatilere Klasse. Bei gemischten Inhalten die volatilste vorkommende Klasse.
-- Haltbarkeitsnotiz: Begründung in höchstens zehn Wörtern, bei gemischten Inhalten „gemischt, volatilster Teil: …“. Nur mit Haltbarkeit.
-- Horizont: nur bei Prognose und nur, wenn ein Zieldatum genannt wird (nur ein Jahr: der 31.12. dieses Jahres), Format JJJJ-MM-TT. Nie schätzen.
-- Kernaussagen: nur wenn Thema „KI & Technologie“ enthält und die Aussagen aus mehr als einer Haltbarkeitsklasse stammen. Höchstens 15 tragende Aussagen, je ein Satz, inhaltlich unverändert, je ein Marker: Prinzip, Praxis, Stand oder Prognose (bei Prognose mit Zieljahr, falls genannt, als „Prognose|2027“). Sonst leer.
+- zeitgebunden: zwei bis fünf Begriffe, was in der Essenz konkret veralten kann, etwa „Umfragezahlen, Preisindex“. Zeitgebunden sind Zahlen und Statistiken, Preise und Budgets, Modell-, Produkt- und Toolnamen samt Funktionen, Benchmarks, Rechtsstände und Fristen, Marktanteile, Personalien in Funktionen, Prognosen mit Zeitpunkt. Enthält die Essenz nichts davon (Essay, Denkmodell, Haltung), bleibt die Liste leer. Kein Eintrag aus Vorsicht.
+- stand_zusatz: nur wenn die Essenz eine Erhebung nennt, die weit vor der Veröffentlichung liegt, etwa „Befragung April bis Juni 2026“. Sonst null.
 `.trim();
+
+export const SCHLUSSSATZ_ANFANG = 'Enthält zeitgebundene Angaben (';
+
+/**
+ * Der Schlusssatz aus dem Notion-Skill. Das Datum kommt nicht vom Modell:
+ * Monat und Jahr von Publiziert am, ersatzweise vom Erfassungsdatum.
+ */
+export function schlusssatz(begriffe: string[], published: string | null, today: Date, zusatz: string | null = null): string | null {
+  if (!begriffe.length) return null;
+  const date = published ? new Date(published) : today;
+  const monat = new Intl.DateTimeFormat('de-DE', { month: 'long', year: 'numeric', timeZone: 'Europe/Berlin' }).format(date);
+  return `${SCHLUSSSATZ_ANFANG}${begriffe.join(', ')}). Stand der Quelle: ${monat}${zusatz ? ` (${zusatz})` : ''}. Vor Weiterverwendung prüfen.`;
+}

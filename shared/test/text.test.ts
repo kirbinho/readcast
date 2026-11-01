@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { keepExistingProperties } from '../src/wissen.ts';
+import { keepExistingProperties, schlusssatz } from '../src/wissen.ts';
 import { formatTs, htmlToText, isVerbatim, normalizeForMatch, safeUrl } from '../src/text.ts';
 
 test('Zeitstempel', () => {
@@ -35,4 +35,15 @@ test('Nur vorhandene Notion-Felder werden geschrieben', () => {
   const r = keepExistingProperties({ Titel: 1, Haltbarkeit: 2, Haltbarkeitsnotiz: 3 }, ['Titel', 'Thema']);
   assert.deepEqual(r.kept, { Titel: 1 });
   assert.deepEqual(r.dropped, ['Haltbarkeit', 'Haltbarkeitsnotiz']);
+});
+
+test('Schlusssatz nach dem Notion-Skill', () => {
+  const heute = new Date('2026-11-02T10:00:00Z');
+  assert.equal(
+    schlusssatz(['Umfragezahlen', 'Preisindex'], '2026-10-15T00:00:00Z', heute),
+    'Enthält zeitgebundene Angaben (Umfragezahlen, Preisindex). Stand der Quelle: Oktober 2026. Vor Weiterverwendung prüfen.',
+  );
+  assert.ok(schlusssatz(['Zahlen'], null, heute)?.includes('Stand der Quelle: November 2026.'), 'ersatzweise das Erfassungsdatum');
+  assert.ok(schlusssatz(['Zahlen'], '2026-10-15T00:00:00Z', heute, 'Befragung April bis Juni 2026')?.includes('Oktober 2026 (Befragung April bis Juni 2026).'));
+  assert.equal(schlusssatz([], '2026-10-15T00:00:00Z', heute), null, 'zeitlose Inhalte bekommen keinen Satz');
 });

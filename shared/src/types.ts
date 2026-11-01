@@ -92,10 +92,8 @@ export interface NotionMeta {
   evidenzgrad: string;
   sensibel: boolean;
   zeitIntern: boolean;
-  haltbarkeit: string | null;
-  haltbarkeitsnotiz: string | null;
-  horizont: string | null;
-  kernaussagen: { marker: string; text: string }[];
+  zeitgebunden: string[]; // zwei bis fünf Begriffe für den Schlusssatz, leer bei zeitlosen Inhalten
+  standZusatz: string | null; // z. B. „Befragung April bis Juni 2026“
 }
 
 export interface QaEntry {

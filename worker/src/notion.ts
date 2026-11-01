@@ -3,7 +3,7 @@
 
 import type { Block, EpisodeMeta, ModeKey, NotionMeta, QaEntry, Results, Speaker } from '../../shared/src/types.ts';
 import { formatTs } from '../../shared/src/text.ts';
-import { FREIGABE_THEMEN, WISSEN_DATA_SOURCE_ID, keepExistingProperties } from '../../shared/src/wissen.ts';
+import { FREIGABE_THEMEN, SCHLUSSSATZ_ANFANG, WISSEN_DATA_SOURCE_ID, keepExistingProperties, schlusssatz } from '../../shared/src/wissen.ts';
 import { HttpError, type Env } from './http.ts';
 import type { EpisodeRow } from './store.ts';
 
@@ -113,10 +113,30 @@ function properties(meta: EpisodeMeta, nm: NotionMeta, speakers: Speaker[], link
   };
   if (people.length) props.Personen = { rich_text: rt(people.join(', ')) };
   if (meta.published) props['Publiziert am'] = { date: { start: meta.published.slice(0, 10) } };
-  if (nm.haltbarkeit) props.Haltbarkeit = { select: { name: nm.haltbarkeit } };
-  if (nm.haltbarkeitsnotiz) props.Haltbarkeitsnotiz = { rich_text: rt(nm.haltbarkeitsnotiz) };
-  if (nm.horizont) props.Horizont = { date: { start: nm.horizont } };
   return props;
+}
+
+async function findClosing(env: Env, pageId: string): Promise<{ id: string; text: string } | null> {
+  let cursor: string | null = null;
+  for (let page = 0; page < 5; page++) {
+    const r: { results: NotionBlock[]; has_more: boolean; next_cursor: string | null } = await notion(
+      env,
+      'GET',
+      `/blocks/${pageId}/children?page_size=100${cursor ? `&start_cursor=${cursor}` : ''}`,
+    );
+    for (const b of r.results) {
+      const text = b.paragraph?.rich_text?.map((t) => t.plain_text).join('') ?? '';
+      if (text.startsWith(SCHLUSSSATZ_ANFANG)) return { id: b.id, text };
+    }
+    if (!r.has_more) return null;
+    cursor = r.next_cursor;
+  }
+  return null;
+}
+
+interface NotionBlock {
+  id: string;
+  paragraph?: { rich_text?: { plain_text: string }[] };
 }
 
 export interface SaveResult {
@@ -138,16 +158,14 @@ export async function save(env: Env, row: EpisodeRow, modes: ModeKey[], qa: QaEn
   if (!add.length) throw new HttpError(400, 'Nichts Neues ausgewählt.');
 
   const children = add.flatMap((m) => modeBlocks(m, results, speakers, qa));
+  // Ältere Auswertungen kennen den Schlusssatz noch nicht
+  const closing = schlusssatz(nm.zeitgebunden ?? [], meta.published, new Date(), nm.standZusatz ?? null);
 
   if (!row.notion_page_id) {
-    // Felder wie Haltbarkeit können in Notion wegfallen. Mit ihnen entfällt auch der Kernaussagen-Block, der darauf aufbaut.
     const schema = await notion<{ properties: Record<string, unknown> }>(env, 'GET', `/data_sources/${WISSEN_DATA_SOURCE_ID}`);
     const { kept, dropped } = keepExistingProperties(properties(meta, nm, speakers, row.link, add), Object.keys(schema.properties));
     if (dropped.length) console.error(`Felder fehlen in Wissen: ${dropped.join(', ')}`);
-    const head: NBlock[] = nm.kernaussagen.length && 'Haltbarkeit' in schema.properties
-      ? [h2('Kernaussagen'), ...nm.kernaussagen.map((k) => p({ text: `[${k.marker}] ${k.text}` }))]
-      : [];
-    const all = [...head, ...children];
+    const all = closing ? [...children, p({ text: closing })] : children;
     const page = await notion<{ id: string; url: string }>(env, 'POST', '/pages', {
       parent: { type: 'data_source_id', data_source_id: WISSEN_DATA_SOURCE_ID },
       properties: kept,
@@ -159,11 +177,19 @@ export async function save(env: Env, row: EpisodeRow, modes: ModeKey[], qa: QaEn
     return { pageUrl: page.url, pageId: page.id, added: add, last: { blockIds: [], createdPage: true, modes: add } };
   }
 
+  // Der Schlusssatz bleibt der letzte Absatz der Seite: Der alte wird übernommen und ans neue Ende gesetzt.
+  // Erst neu anhängen, dann den alten löschen, damit er bei einem Fehler nicht verloren geht.
+  const old = await findClosing(env, row.notion_page_id);
+  const lastText = old?.text ?? closing;
+  const toAdd = lastText ? [...children, p({ text: lastText })] : children;
   const ids: string[] = [];
-  for (let i = 0; i < children.length; i += 100) {
-    const r = await notion<{ results: { id: string }[] }>(env, 'PATCH', `/blocks/${row.notion_page_id}/children`, { children: children.slice(i, i + 100) });
+  for (let i = 0; i < toAdd.length; i += 100) {
+    const r = await notion<{ results: { id: string }[] }>(env, 'PATCH', `/blocks/${row.notion_page_id}/children`, { children: toAdd.slice(i, i + 100) });
     ids.push(...r.results.map((x) => x.id));
   }
+  if (old) await notion(env, 'DELETE', `/blocks/${old.id}`);
+  // Beim Rückgängigmachen bleibt der Schlusssatz stehen
+  if (lastText) ids.pop();
   return { pageUrl: row.notion_page_url!, pageId: row.notion_page_id, added: add, last: { blockIds: ids, createdPage: false, modes: add } };
 }
 

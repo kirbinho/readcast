@@ -2,7 +2,7 @@
 
 import { z } from 'zod';
 import type { EpisodeMeta, NotionMeta, Results, Speaker } from '../../shared/src/types.ts';
-import { EINSTUFUNGSREGELN, EVIDENZGRADE, HALTBARKEITEN, KONTEXTE, THEMEN } from '../../shared/src/wissen.ts';
+import { EINSTUFUNGSREGELN, EVIDENZGRADE, KONTEXTE, THEMEN } from '../../shared/src/wissen.ts';
 import { UNTRUSTED_NOTE, callJson, fence } from './claude.ts';
 
 const Schema = z.object({
@@ -12,10 +12,8 @@ const Schema = z.object({
   evidenzgrad: z.enum(EVIDENZGRADE),
   sensibel: z.boolean(),
   zeit_intern: z.boolean(),
-  haltbarkeit: z.enum(HALTBARKEITEN).nullable(),
-  haltbarkeitsnotiz: z.string().nullable(),
-  horizont: z.string().nullable(),
-  kernaussagen: z.array(z.object({ marker: z.string(), text: z.string() })),
+  zeitgebunden: z.array(z.string()),
+  stand_zusatz: z.string().nullable(),
 });
 
 export async function classify(meta: EpisodeMeta, results: Results, speakers: Speaker[]): Promise<NotionMeta> {
@@ -40,19 +38,14 @@ Grundlage ist nur die Essenz unten. Erfinde nichts hinzu.`,
     ].join('\n\n'),
   });
 
-  const themen = [...new Set(r.themen)].slice(0, 2);
-  const ki = themen.includes('KI & Technologie');
-  const kernMarker = /^(Prinzip|Praxis|Stand|Prognose(\|\d{4})?)$/;
   return {
     titel: r.titel.trim().slice(0, 60),
-    themen,
+    themen: [...new Set(r.themen)].slice(0, 2),
     kontext: r.kontext,
     evidenzgrad: r.evidenzgrad,
     sensibel: r.sensibel,
     zeitIntern: r.zeit_intern,
-    haltbarkeit: ki ? r.haltbarkeit : null,
-    haltbarkeitsnotiz: ki ? r.haltbarkeitsnotiz : null,
-    horizont: ki && r.haltbarkeit === 'Prognose' && r.horizont && /^\d{4}-\d{2}-\d{2}$/.test(r.horizont) ? r.horizont : null,
-    kernaussagen: ki ? r.kernaussagen.filter((k) => kernMarker.test(k.marker)).slice(0, 15) : [],
+    zeitgebunden: r.zeitgebunden.map((b) => b.trim()).filter(Boolean).slice(0, 5),
+    standZusatz: r.stand_zusatz?.trim() || null,
   };
 }
