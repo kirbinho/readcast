@@ -13,3 +13,13 @@ export function titleSimilarity(a: string, b: string): number {
   for (const t of ta) if (tb.has(t)) common++;
   return (2 * common) / (ta.size + tb.size);
 }
+
+/** Wie viel von `part` in `whole` steckt, zwischen 0 und 1. Für Seitentitel, die mehr enthalten als den Folgentitel. */
+export function containment(part: string, whole: string): number {
+  const tp = tokens(part);
+  const tw = tokens(whole);
+  if (tp.size < 3) return 0;
+  let common = 0;
+  for (const t of tp) if (tw.has(t)) common++;
+  return common / tp.size;
+}

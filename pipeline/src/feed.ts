@@ -137,8 +137,9 @@ export function toMeta(feed: Feed, item: FeedItem, episodeUrl: string | null): E
   if (!item.audioUrl) throw new SafeError('Die Folge hat keine Audiodatei im Feed.');
   const published = item.pubDate ? new Date(item.pubDate) : null;
   return {
-    show: feed.title,
-    title: item.title,
+    // Manche Feeds kodieren Sonderzeichen doppelt, etwa &amp;amp;
+    show: htmlToText(feed.title),
+    title: htmlToText(item.title),
     published: published && !Number.isNaN(published.getTime()) ? published.toISOString() : null,
     durationSec: item.durationSec,
     audioUrl: item.audioUrl,

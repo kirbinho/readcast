@@ -16,7 +16,8 @@ export function assertPublicUrl(raw: string): URL {
   return u;
 }
 
-const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 15_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15 Readcast/1.0';
+// Readcast gibt sich ehrlich zu erkennen und tarnt sich nicht als Browser
+const UA = 'Readcast/1.0 (+https://github.com/kirbinho/readcast)';
 
 export async function fetchText(
   url: string,
