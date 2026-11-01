@@ -8,7 +8,7 @@ import { login, requirePipeline, requireUser } from './auth.ts';
 import { dispatchPipeline } from './github.ts';
 import { HttpError, type Env, cors, json, now, readJson } from './http.ts';
 import { save, undo } from './notion.ts';
-import { addSpend, budget, getRow, normalizeLink, recents, view } from './store.ts';
+import { budget, getRow, normalizeLink, recents, reserve, settleCost, view } from './store.ts';
 
 type Handler = (req: Request, env: Env, params: string[]) => Promise<Response>;
 
@@ -27,7 +27,7 @@ const routes: [string, RegExp, Handler][] = [
     const url = safeUrl(link ?? '');
     if (!url) throw new HttpError(400, 'Das ist kein gültiger Link.');
     const b = await budget(env);
-    if (b.spentUsd >= b.capUsd) throw new HttpError(402, 'Das Budget für diesen Monat ist aufgebraucht. Ab dem 1. geht es weiter.');
+    if (b.availableUsd <= 0) throw new HttpError(402, 'Das Budget für diesen Monat ist aufgebraucht. Ab dem 1. geht es weiter.');
 
     const norm = normalizeLink(url.toString());
     const existing = await env.DB.prepare(
@@ -97,20 +97,20 @@ const routes: [string, RegExp, Handler][] = [
 
   ['POST', /^\/internal\/jobs\/([0-9a-f-]{36})\/progress$/, async (req, env, [id]) => {
     requirePipeline(req, env);
-    const p = await readJson<{ status: Status; progress: number; etaSec?: number | null; meta?: EpisodeMeta; speakers?: Speaker[]; speakerCount?: number }>(req);
+    const p = await readJson<{ status: Status; progress: number; costUsd?: number; etaSec?: number | null; meta?: EpisodeMeta; speakers?: Speaker[]; speakerCount?: number }>(req);
     await env.DB.prepare(
       `UPDATE episodes SET status = ?, progress = ?, eta_sec = ?, meta = COALESCE(?, meta), speakers = COALESCE(?, speakers),
        speaker_count = COALESCE(?, speaker_count), updated_at = ? WHERE id = ?`,
     ).bind(p.status, Math.round(p.progress), p.etaSec ?? null, p.meta ? JSON.stringify(p.meta) : null,
       p.speakers ? JSON.stringify(p.speakers) : null, p.speakerCount ?? null, now(), id).run();
+    await settleCost(env, id, p.costUsd ?? 0);
     return json(env, { ok: true });
   }],
 
-  ['POST', /^\/internal\/jobs\/([0-9a-f-]{36})\/budget$/, async (req, env) => {
+  ['POST', /^\/internal\/jobs\/([0-9a-f-]{36})\/reserve$/, async (req, env, [id]) => {
     requirePipeline(req, env);
-    const { estimateUsd } = await readJson<{ estimateUsd: number }>(req);
-    const b = await budget(env);
-    return json(env, { ok: b.spentUsd + estimateUsd <= b.capUsd });
+    const { ceilingUsd } = await readJson<{ ceilingUsd: number }>(req);
+    return json(env, { ok: await reserve(env, id, ceilingUsd) });
   }],
 
   ['POST', /^\/internal\/jobs\/([0-9a-f-]{36})\/result$/, async (req, env, [id]) => {
@@ -121,18 +121,18 @@ const routes: [string, RegExp, Handler][] = [
     const segIndex = r.segments.map((s) => [s.id, s.start, s.spk]);
     await env.DB.prepare(
       `UPDATE episodes SET status = 'fertig', progress = 100, eta_sec = NULL, error = NULL, results = ?, speakers = ?, notion_meta = ?,
-       transcript = ?, seg_index = ?, cost_usd = cost_usd + ?, updated_at = ? WHERE id = ?`,
-    ).bind(JSON.stringify(r.results), JSON.stringify(r.speakers), JSON.stringify(r.notionMeta), transcript, JSON.stringify(segIndex), r.costUsd, now(), id).run();
-    await addSpend(env, r.costUsd);
+       transcript = ?, seg_index = ?, updated_at = ? WHERE id = ?`,
+    ).bind(JSON.stringify(r.results), JSON.stringify(r.speakers), JSON.stringify(r.notionMeta), transcript, JSON.stringify(segIndex), now(), id).run();
+    await settleCost(env, id, r.costUsd);
     return json(env, { ok: true });
   }],
 
   ['POST', /^\/internal\/jobs\/([0-9a-f-]{36})\/fail$/, async (req, env, [id]) => {
     requirePipeline(req, env);
     const r = await readJson<{ status: Status; error: string; costUsd: number }>(req);
-    await env.DB.prepare('UPDATE episodes SET status = ?, error = ?, cost_usd = cost_usd + ?, updated_at = ? WHERE id = ?')
-      .bind(r.status, r.error.slice(0, 500), r.costUsd, now(), id).run();
-    await addSpend(env, r.costUsd);
+    await env.DB.prepare('UPDATE episodes SET status = ?, error = ?, updated_at = ? WHERE id = ?')
+      .bind(r.status, r.error.slice(0, 500), now(), id).run();
+    await settleCost(env, id, r.costUsd);
     return json(env, { ok: true });
   }],
 ];

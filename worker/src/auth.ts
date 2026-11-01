@@ -45,7 +45,10 @@ export async function requireUser(req: Request, env: Env): Promise<User> {
   if (!payload || !sig || !safeEqual(sig, await hmac(env.TOKEN_SECRET, payload))) throw new HttpError(401, 'Bitte neu anmelden.');
   const data = JSON.parse(fromB64url(payload)) as { uid: string; name: string; exp: number };
   if (data.exp < Date.now()) throw new HttpError(401, 'Bitte neu anmelden.');
-  return { id: data.uid, name: data.name };
+  // Ein gelöschter Zugang gilt sofort nicht mehr, auch wenn sein Token noch läuft
+  const user = await env.DB.prepare('SELECT id, name FROM users WHERE id = ?').bind(data.uid).first<User>();
+  if (!user) throw new HttpError(401, 'Bitte neu anmelden.');
+  return user;
 }
 
 export async function login(req: Request, env: Env): Promise<{ token: string; name: string }> {

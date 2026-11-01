@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS episodes (
   notion_modes TEXT NOT NULL DEFAULT '[]',
   notion_last TEXT,
   cost_usd REAL NOT NULL DEFAULT 0,
+  reserved_usd REAL NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

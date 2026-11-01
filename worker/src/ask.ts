@@ -31,7 +31,7 @@ export async function ask(env: Env, row: EpisodeRow, question: string): Promise<
   if (!q) throw new HttpError(400, 'Die Frage ist leer.');
   if (row.status !== 'fertig' || !row.transcript || !row.seg_index) throw new HttpError(409, 'Die Folge ist noch nicht fertig ausgelesen.');
   const b = await budget(env);
-  if (b.spentUsd >= b.capUsd) throw new HttpError(402, 'Das Budget für diesen Monat ist aufgebraucht.');
+  if (b.availableUsd < 0.1) throw new HttpError(402, 'Das Budget für diesen Monat ist aufgebraucht.');
 
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 2 });
   const msg = await client.beta.messages.create({

@@ -1,6 +1,7 @@
 // RSS-Feed lesen und eine Folge darin finden.
 
 import { XMLParser } from 'fast-xml-parser';
+import { SafeError } from './errors.ts';
 import type { EpisodeMeta, ShownoteLink } from '../../shared/src/types.ts';
 import { domainOf, htmlToText, safeUrl } from '../../shared/src/text.ts';
 import { titleSimilarity } from './similarity.ts';
@@ -58,7 +59,7 @@ export function looksLikeFeed(body: string, contentType: string): boolean {
 export function parseFeed(xml: string, url: string): Feed {
   const doc = parser.parse(xml);
   const ch = doc?.rss?.channel;
-  if (!ch) throw new Error('Kein RSS-Feed.');
+  if (!ch) throw new SafeError('Kein RSS-Feed.');
   const items: FeedItem[] = (ch.item ?? []).map((it: Record<string, unknown>) => {
     const enc = it.enclosure as Record<string, string> | undefined;
     const img = it['itunes:image'] as Record<string, string> | undefined;
@@ -133,7 +134,7 @@ export function extractLinks(html: string): ShownoteLink[] {
 }
 
 export function toMeta(feed: Feed, item: FeedItem, episodeUrl: string | null): EpisodeMeta {
-  if (!item.audioUrl) throw new Error('Die Folge hat keine Audiodatei im Feed.');
+  if (!item.audioUrl) throw new SafeError('Die Folge hat keine Audiodatei im Feed.');
   const published = item.pubDate ? new Date(item.pubDate) : null;
   return {
     show: feed.title,

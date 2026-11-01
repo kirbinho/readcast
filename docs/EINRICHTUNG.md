@@ -6,6 +6,7 @@ Einmalig, etwa 45 Minuten. Du brauchst fünf Konten. Alle Schlüssel landen am E
 
 1. Neues **öffentliches** Repository `readcast` anlegen und diesen Ordner hochladen.
 2. **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+3. Falls noch nicht aktiv: Zwei-Faktor-Anmeldung für dein GitHub-Konto einschalten.
 
 ## 2. Cloudflare (kostenlos)
 
@@ -16,12 +17,12 @@ Einmalig, etwa 45 Minuten. Du brauchst fünf Konten. Alle Schlüssel landen am E
 
 ## 3. AssemblyAI (Transkription)
 
-Konto auf [assemblyai.com](https://www.assemblyai.com) anlegen (50 $ Startguthaben), API-Schlüssel notieren.
+Konto auf [assemblyai.com](https://www.assemblyai.com) anlegen (50 $ Startguthaben), API-Schlüssel notieren. **Keine Karte hinterlegen:** Ohne Karte kann nur das Guthaben verbraucht werden.
 
 ## 4. Claude
 
 1. In der [Claude Console](https://platform.claude.com) einen API-Schlüssel anlegen.
-2. **Empfohlen:** unter **Limits** eine monatliche Ausgabengrenze setzen, etwa 12 $. Das ist die zweite Sicherung neben der 10-€-Grenze in Readcast.
+2. **Wichtig:** Nur begrenzt Guthaben aufladen, etwa 10 $, und die **automatische Aufladung auslassen**. Zusätzlich unter **Limits** eine monatliche Ausgabengrenze von 10 $ setzen. Das ist die zweite Sicherung neben der 10-€-Grenze in Readcast.
 
 ## 5. Notion
 

@@ -2,8 +2,9 @@
 // Protokolliert werden nur Schritte und Zahlen, keine Inhalte: Die Protokolle sind öffentlich.
 
 import type { Results, Speaker } from '../../shared/src/types.ts';
-import { TRANSCRIPTION_USD_PER_HOUR, estimateEpisodeUsd } from '../../shared/src/prices.ts';
-import { claudeSpent } from './claude.ts';
+import { MAX_EPISODE_SEC, TRANSCRIPTION_USD_PER_HOUR, analysisCeilingUsd, episodeCeilingUsd } from '../../shared/src/prices.ts';
+import { MODEL, claudeSpent, setRunLimit } from './claude.ts';
+import { RunLimitError, SafeError } from './errors.ts';
 import { classify } from './classify.ts';
 import { extractAll } from './extract.ts';
 import * as report from './report.ts';
@@ -27,36 +28,59 @@ if (!jobId || !/^[a-z0-9-]{8,40}$/.test(jobId)) {
 let transcriptionUsd = 0;
 const cost = () => transcriptionUsd + claudeSpent();
 const log = (step: string) => console.log(`[${new Date().toISOString()}] ${step}`);
+const BUDGET_TEXT = 'Das Budget für diesen Monat reicht für diese Folge nicht mehr. Ab dem 1. geht es weiter.';
+const TOO_LONG_TEXT = 'Folgen über drei Stunden liest Readcast nicht aus.';
+const COST_LIMIT_TEXT = 'Die Auswertung dieser Folge wäre zu teuer geworden und wurde gestoppt.';
 
 async function run() {
   const job = await report.getJob(jobId);
   log('Suche die Folge');
-  await report.progress(jobId, { status: 'sucht', progress: 3 });
+  await report.progress(jobId, { status: 'sucht', progress: 3, costUsd: 0 });
 
   const meta = await resolveEpisode(job.link);
-  const duration = meta.durationSec ?? 3600;
-  const { ok } = await report.budgetCheck(jobId, estimateEpisodeUsd(duration));
-  if (!ok) {
-    await report.fail(jobId, { status: 'budget', error: 'Das Budget für diesen Monat reicht für diese Folge nicht mehr.', costUsd: 0 });
+  if ((meta.durationSec ?? 0) > MAX_EPISODE_SEC) {
+    await report.fail(jobId, { status: 'fehler', error: TOO_LONG_TEXT, costUsd: 0 });
+    return;
+  }
+  // Ohne Längenangabe im Feed wird die Höchstlänge reserviert
+  const duration = meta.durationSec ?? MAX_EPISODE_SEC;
+  if (!(await report.reserve(jobId, episodeCeilingUsd(duration, MODEL))).ok) {
+    await report.fail(jobId, { status: 'budget', error: BUDGET_TEXT, costUsd: 0 });
     return;
   }
   // Grobe Dauer: Transkription etwa ein Zehntel der Laufzeit, Auswertung drei bis sechs Minuten
   const etaTotal = Math.max(120, duration * 0.1) + 240;
-  await report.progress(jobId, { status: 'hoert', progress: 8, etaSec: Math.round(etaTotal), meta });
+  await report.progress(jobId, { status: 'hoert', progress: 8, costUsd: 0, etaSec: Math.round(etaTotal), meta });
 
   log('Transkription läuft');
   const tStart = Date.now();
   const transcript = await transcribe(meta, async (elapsed) => {
     const expected = Math.max(90, duration * 0.1);
     const p = 8 + Math.min(40, (elapsed / expected) * 40);
-    await report.progress(jobId, { status: 'hoert', progress: Math.round(p), etaSec: Math.max(60, Math.round(etaTotal - (Date.now() - tStart) / 1000)) });
+    await report.progress(jobId, { status: 'hoert', progress: Math.round(p), costUsd: 0, etaSec: Math.max(60, Math.round(etaTotal - (Date.now() - tStart) / 1000)) });
   });
   transcriptionUsd = (transcript.durationSec / 3600) * TRANSCRIPTION_USD_PER_HOUR;
   log(`Transkript fertig: ${transcript.utterances.length} Äußerungen, ${Math.round(transcript.durationSec / 60)} Minuten`);
 
+  // Kosten sofort verbuchen, damit sie auch bei einem späteren Absturz zählen
+  await report.progress(jobId, { status: 'liest', progress: 50, costUsd: cost(), etaSec: 240 });
+
+  // Der Feed kann eine falsche Länge nennen: lieber abbrechen als nur einen Teil auswerten
+  if (transcript.durationSec > MAX_EPISODE_SEC) {
+    await report.fail(jobId, { status: 'fehler', error: TOO_LONG_TEXT, costUsd: cost() });
+    return;
+  }
+
+  // Jetzt ist die echte Länge bekannt: Reservierung und Kostengrenze darauf einstellen
+  if (!(await report.reserve(jobId, transcriptionUsd + analysisCeilingUsd(transcript.durationSec, MODEL))).ok) {
+    await report.fail(jobId, { status: 'budget', error: BUDGET_TEXT, costUsd: cost() });
+    return;
+  }
+  setRunLimit(analysisCeilingUsd(transcript.durationSec, MODEL));
+
   let segments = toSegments(transcript.utterances);
-  if (!segments.length) throw new Error('Im Transkript steht nichts.');
-  await report.progress(jobId, { status: 'liest', progress: 52, etaSec: 240 });
+  if (!segments.length) throw new SafeError('Im Transkript steht nichts.');
+  await report.progress(jobId, { status: 'liest', progress: 52, costUsd: cost(), etaSec: 240 });
 
   // Stimmen benennen, doppelte Kennungen zusammenlegen, dann zählen
   const named = await nameSpeakers(meta, segments, voiceStats(segments));
@@ -70,18 +94,18 @@ async function run() {
   const voices = speakers.filter((s) => s.role !== 'sonstige');
   log(`${voices.length} Stimmen`);
   if (voices.length > MAX_VOICES) {
-    await report.progress(jobId, { status: 'zu_viele', progress: 100, speakers, speakerCount: voices.length });
+    await report.progress(jobId, { status: 'zu_viele', progress: 100, costUsd: cost(), speakers, speakerCount: voices.length });
     await report.fail(jobId, { status: 'zu_viele', error: `${voices.length} Stimmen erkannt.`, costUsd: cost() });
     return;
   }
-  await report.progress(jobId, { status: 'liest', progress: 58, etaSec: 200, speakers, speakerCount: voices.length });
+  await report.progress(jobId, { status: 'liest', progress: 58, costUsd: cost(), etaSec: 200, speakers, speakerCount: voices.length });
 
   const names = Object.fromEntries(speakers.map((s) => [s.label, s.name ?? `Stimme ${s.label}`]));
 
   log('Lese Abschnitte');
   const wins = await extractAll(meta, segments, speakers);
   log(`${wins.reduce((a, w) => a + w.claims.length, 0)} Aussagen, ${wins.reduce((a, w) => a + w.quotes.length, 0)} O-Ton-Kandidaten`);
-  await report.progress(jobId, { status: 'liest', progress: 74, etaSec: 120 });
+  await report.progress(jobId, { status: 'liest', progress: 74, costUsd: cost(), etaSec: 120 });
 
   log('Führe Themen zusammen');
   const topics = await mergeTopics(meta, wins, segments, names);
@@ -89,7 +113,7 @@ async function run() {
   for (const t of sel.scored) {
     log(`Thema ${t.topic.id}: ${(t.share * 100).toFixed(1)} % Sendezeit, Gewicht ${t.score.toFixed(2)}, ${sel.main.includes(t) ? 'Schwerpunkt' : sel.shorts.includes(t) ? 'Kurzmeldung' : 'raus'}`);
   }
-  await report.progress(jobId, { status: 'schreibt', progress: 82, etaSec: 90 });
+  await report.progress(jobId, { status: 'schreibt', progress: 82, costUsd: cost(), etaSec: 90 });
 
   log('Schreibe Auswertungen');
   const quotes = wins.flatMap((w) => w.quotes);
@@ -97,7 +121,7 @@ async function run() {
     writeEssenz(sel.main, sel.shorts, segments, names),
     ...voices.map((v) => writePerson(v, sel.scored, quotes, segments, names)),
   ]);
-  await report.progress(jobId, { status: 'schreibt', progress: 92, etaSec: 40 });
+  await report.progress(jobId, { status: 'schreibt', progress: 92, costUsd: cost(), etaSec: 40 });
 
   log('Prüfe gegen das Transkript');
   const [essenz, ...checkedPeople] = await Promise.all([
@@ -121,15 +145,18 @@ async function run() {
 
 run().catch(async (e: unknown) => {
   const notFound = e instanceof NotFoundError;
-  console.error(notFound ? 'Folge nicht gefunden' : `Fehler: ${e instanceof Error ? e.message.slice(0, 300) : 'unbekannt'}`);
+  const overLimit = e instanceof RunLimitError;
+  // Das Protokoll ist öffentlich: fremde Fehlertexte könnten Inhalte enthalten, deshalb nur ihre Art
+  const text = e instanceof SafeError ? e.message : e instanceof Error ? e.name : 'unbekannt';
+  console.error(notFound ? 'Folge nicht gefunden' : `Fehler: ${text}`);
   try {
     await report.fail(jobId, {
-      status: notFound ? 'nicht_gefunden' : 'fehler',
-      error: notFound ? (e as Error).message : 'Beim Auslesen ist etwas schiefgegangen. Versuch es später noch einmal.',
+      status: notFound ? 'nicht_gefunden' : overLimit ? 'budget' : 'fehler',
+      error: notFound ? (e as Error).message : overLimit ? COST_LIMIT_TEXT : 'Beim Auslesen ist etwas schiefgegangen. Versuch es später noch einmal.',
       costUsd: cost(),
     });
   } catch {
-    // Worker nicht erreichbar: Der Auftrag bleibt hängen und läuft nach einer Stunde ab
+    // Worker nicht erreichbar: Der Auftrag bleibt hängen und läuft nach 90 Minuten ab
   }
   process.exit(1);
 });

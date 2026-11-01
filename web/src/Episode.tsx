@@ -17,7 +17,7 @@ const voicesOf = (ep: EpisodeView) => ep.speakers.filter((s) => s.role !== 'sons
 
 function tabsFor(ep: EpisodeView): Tab[] {
   const tabs: Tab[] = [{ id: 'uebersicht', label: 'Übersicht', mode: null }];
-  if (ep.status === 'zu_viele') return tabs;
+  if (ep.status === 'zu_viele' || ep.status === 'budget' || ep.status === 'fehler') return tabs;
   tabs.push({ id: 'essenz', label: 'Essenz', mode: 'essenz' }, { id: 'zehn', label: '10 O-Töne', mode: 'zehn' });
   for (const v of voicesOf(ep)) tabs.push({ id: `p-${v.label}`, label: v.short, mode: `p:${v.label}` });
   tabs.push({ id: 'frag', label: 'Frag die Folge', mode: 'frag' });
@@ -168,7 +168,7 @@ export function Episode({ id, tab, onAuthLost }: { id: string; tab: string; onAu
   }
 
   const meta = ep.meta;
-  const failedText = ep.status === 'fehler' ? (ep.error ?? 'Beim Auslesen ist etwas schiefgegangen.') : null;
+  const failedText = ep.status === 'fehler' || ep.status === 'budget' ? (ep.error ?? 'Beim Auslesen ist etwas schiefgegangen.') : null;
 
   return (
     <main class="page">

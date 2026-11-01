@@ -28,7 +28,7 @@ Alle Schlüssel liegen als Geheimnisse bei GitHub und Cloudflare, nie im Code un
 
 ## Kosten
 
-Monatsgrenze: 10 € (`CAP_EUR` in `worker/wrangler.toml`). Vor jeder Folge prüft die Pipeline, ob das Budget reicht, danach verbucht sie die tatsächlichen Kosten. Fragen an die Folge werden ebenfalls verbucht.
+Monatsgrenze: 10 € (`CAP_EUR` in `worker/wrangler.toml`). Jede Folge reserviert vor dem Start ihre Höchstkosten und startet nicht, wenn sie nicht mehr ins Budget passt. Wie die Grenze abgesichert ist, steht in [docs/SICHERHEIT.md](docs/SICHERHEIT.md#budget).
 
 Grobe Schätzung pro Folge, noch nicht an echten Folgen gemessen:
 

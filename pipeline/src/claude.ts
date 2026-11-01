@@ -4,6 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import type { z } from 'zod';
 import { CLAUDE_MODEL, claudeCostUsd } from '../../shared/src/prices.ts';
+import { RunLimitError, SafeError } from './errors.ts';
 
 const client = new Anthropic({ maxRetries: 4 });
 
@@ -11,6 +12,12 @@ export const MODEL = process.env.READCAST_MODEL || CLAUDE_MODEL;
 
 let spentUsd = 0;
 export const claudeSpent = () => spentUsd;
+
+let limitUsd = Infinity;
+/** Ab dieser Summe startet dieser Lauf keinen weiteren Aufruf mehr. */
+export function setRunLimit(usd: number): void {
+  limitUsd = usd;
+}
 
 type Effort = 'low' | 'medium' | 'high';
 
@@ -54,6 +61,7 @@ export async function callJson<S extends z.ZodType>(call: JsonCall<S>): Promise<
   return queue.run(async () => {
     let lastError: unknown;
     for (let attempt = 0; attempt < 2; attempt++) {
+      if (spentUsd >= limitUsd) throw new RunLimitError('Kostengrenze des Laufs erreicht.');
       const stream = client.beta.messages.stream({
         model: MODEL,
         max_tokens: call.maxTokens ?? 32000,
@@ -66,9 +74,9 @@ export async function callJson<S extends z.ZodType>(call: JsonCall<S>): Promise<
       });
       const msg = await stream.finalMessage();
       spentUsd += claudeCostUsd(msg.model, msg.usage);
-      if (msg.stop_reason === 'refusal') throw new Error(`Claude hat den Schritt „${call.stage}“ abgelehnt.`);
+      if (msg.stop_reason === 'refusal') throw new SafeError(`Claude hat den Schritt „${call.stage}“ abgelehnt.`);
       if (msg.stop_reason === 'max_tokens') {
-        lastError = new Error(`Schritt „${call.stage}“: Antwort zu lang.`);
+        lastError = new SafeError(`Schritt „${call.stage}“: Antwort zu lang.`);
         continue;
       }
       const text = msg.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('');
@@ -78,6 +86,7 @@ export async function callJson<S extends z.ZodType>(call: JsonCall<S>): Promise<
         lastError = e;
       }
     }
-    throw new Error(`Schritt „${call.stage}“ lieferte kein gültiges Ergebnis: ${String(lastError)}`);
+    // Nur die Fehlerart: Der Fehlertext von JSON und Zod kann Teile der Modellausgabe enthalten
+    throw new SafeError(`Schritt „${call.stage}“ lieferte kein gültiges Ergebnis (${lastError instanceof Error ? lastError.name : 'unbekannt'}).`);
   });
 }

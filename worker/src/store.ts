@@ -25,6 +25,7 @@ export interface EpisodeRow {
   notion_modes: string;
   notion_last: string | null;
   cost_usd: number;
+  reserved_usd: number;
   created_at: string;
   updated_at: string;
 }
@@ -45,7 +46,7 @@ export function normalizeLink(link: string): string {
 }
 
 const LIGHT_COLUMNS = `id, user_id, link, link_norm, status, progress, eta_sec, error, meta, speakers, speaker_count, results,
-  notion_meta, notion_page_id, notion_page_url, notion_modes, notion_last, cost_usd, created_at, updated_at,
+  notion_meta, notion_page_id, notion_page_url, notion_modes, notion_last, cost_usd, reserved_usd, created_at, updated_at,
   NULL AS transcript, NULL AS seg_index`;
 
 /** Ohne `withTranscript` bleibt das Transkript in der Datenbank, das spart Zeit beim regelmäßigen Nachfragen. */
@@ -107,6 +108,21 @@ export async function recents(env: Env, userId: string): Promise<RecentItem[]> {
   });
 }
 
+const RUNNING_SQL = "('wartet','sucht','hoert','liest','schreibt')";
+const staleCutoff = () => new Date(Date.now() - STALE_MS).toISOString();
+
+/** Überträgt die bisherigen Kosten eines Auftrags (Gesamtsumme) ins Monatsbudget. Doppelt melden schadet nicht. */
+export async function settleCost(env: Env, id: string, totalUsd: number): Promise<void> {
+  if (!(totalUsd > 0)) return;
+  const row = await env.DB.prepare('SELECT cost_usd FROM episodes WHERE id = ?').bind(id).first<{ cost_usd: number }>();
+  const delta = totalUsd - (row?.cost_usd ?? 0);
+  if (!(delta > 0)) return;
+  await env.DB.batch([
+    env.DB.prepare('UPDATE episodes SET cost_usd = ? WHERE id = ?').bind(totalUsd, id),
+    env.DB.prepare('INSERT INTO spend (month, usd) VALUES (?, ?) ON CONFLICT(month) DO UPDATE SET usd = usd + excluded.usd').bind(monthKey(), delta),
+  ]);
+}
+
 export async function addSpend(env: Env, usd: number): Promise<void> {
   if (!(usd > 0)) return;
   await env.DB.prepare('INSERT INTO spend (month, usd) VALUES (?, ?) ON CONFLICT(month) DO UPDATE SET usd = usd + excluded.usd')
@@ -114,10 +130,39 @@ export async function addSpend(env: Env, usd: number): Promise<void> {
     .run();
 }
 
-export async function budget(env: Env): Promise<Budget & { spentUsd: number; capUsd: number }> {
-  const row = await env.DB.prepare('SELECT usd FROM spend WHERE month = ?').bind(monthKey()).first<{ usd: number }>();
-  const rate = Number(env.EUR_PER_USD) || 0.92;
+function capUsd(env: Env): { capEur: number; rate: number; capUsd: number } {
+  const rate = Number(env.EUR_PER_USD) || 0.95;
   const capEur = Number(env.CAP_EUR) || 10;
-  const spentUsd = row?.usd ?? 0;
-  return { spentEur: Math.round(spentUsd * rate * 100) / 100, capEur, spentUsd, capUsd: capEur / rate };
+  return { capEur, rate, capUsd: capEur / rate };
+}
+
+export async function budget(env: Env): Promise<Budget & { spentUsd: number; capUsd: number; availableUsd: number }> {
+  const row = await env.DB.prepare(
+    `SELECT COALESCE((SELECT usd FROM spend WHERE month = ?1), 0) AS spent,
+       COALESCE((SELECT SUM(MAX(reserved_usd - cost_usd, 0)) FROM episodes WHERE status IN ${RUNNING_SQL} AND updated_at > ?2), 0) AS reserved`,
+  ).bind(monthKey(), staleCutoff()).first<{ spent: number; reserved: number }>();
+  const c = capUsd(env);
+  const spentUsd = row?.spent ?? 0;
+  return {
+    spentEur: Math.round(spentUsd * c.rate * 100) / 100,
+    capEur: c.capEur,
+    spentUsd,
+    capUsd: c.capUsd,
+    availableUsd: c.capUsd - spentUsd - (row?.reserved ?? 0),
+  };
+}
+
+/**
+ * Reserviert die Höchstkosten einer Folge, nur wenn sie zusammen mit den bisherigen Ausgaben
+ * und den Reservierungen laufender Folgen ins Monatsbudget passen. Eine einzige Anweisung,
+ * damit zwei gleichzeitige Folgen nicht beide durchrutschen.
+ */
+export async function reserve(env: Env, id: string, ceilingUsd: number): Promise<boolean> {
+  const r = await env.DB.prepare(
+    `UPDATE episodes SET reserved_usd = ?1, updated_at = ?2 WHERE id = ?3
+     AND COALESCE((SELECT usd FROM spend WHERE month = ?4), 0)
+       + COALESCE((SELECT SUM(MAX(e.reserved_usd - e.cost_usd, 0)) FROM episodes e WHERE e.id <> ?3 AND e.status IN ${RUNNING_SQL} AND e.updated_at > ?5), 0)
+       + MAX(?1 - cost_usd, 0) <= ?6`,
+  ).bind(ceilingUsd, now(), id, monthKey(), staleCutoff(), capUsd(env).capUsd).run();
+  return r.meta.changes === 1;
 }

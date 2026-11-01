@@ -12,7 +12,8 @@ ALLOWED_ORIGIN = "https://DEIN-GITHUB-NAME.github.io"
 # Repository, in dem die Pipeline läuft
 GITHUB_REPO = "DEIN-GITHUB-NAME/readcast"
 CAP_EUR = "10"
-EUR_PER_USD = "0.92"
+# Bewusst vorsichtig gerechnet, damit Kursschwankungen nicht über die Grenze führen
+EUR_PER_USD = "0.95"
 
 [[d1_databases]]
 binding = "DB"
