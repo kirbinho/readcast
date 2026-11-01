@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { toSegments, voiceStats } from '../src/segments.ts';
-import { decideRole, mergeSameNames } from '../src/speakers.ts';
+import { decideRole, hostsFromShownotes, mergeSameNames } from '../src/speakers.ts';
 import type { Utterance } from '../src/transcribe.ts';
 
 test('lange Äußerungen werden an Satzenden geschnitten', () => {
@@ -50,4 +50,13 @@ test('Kurze Wechsel werden gezählt, lange Blöcke nicht', () => {
   const stats = voiceStats(toSegments([seg('A', 0, 300_000), seg('B', 300_000, 345_000), seg('A', 345_000, 600_000), seg('C', 600_000, 610_000), seg('A', 610_000, 620_000), seg('C', 620_000, 630_000)]));
   assert.equal(stats.find((s) => s.label === 'B')?.shortTurns, 0);
   assert.equal(stats.find((s) => s.label === 'C')?.shortTurns, 2);
+});
+
+test('Host aus den Shownotes', () => {
+  const dave = 'ist eine Produktion von Studio Bummens.\n\nHost: Khesrau Behroz\nExecutive Producer: Tobias Bauckhage, Jon Handschin und Khesrau Behroz.';
+  assert.deepEqual(hostsFromShownotes(dave), ['Khesrau Behroz']);
+  assert.deepEqual(hostsFromShownotes('Moderation: Anna Beispiel und Bert Muster'), ['Anna Beispiel', 'Bert Muster']);
+  assert.deepEqual(hostsFromShownotes('Executive Producer: Tobias Bauckhage'), []);
+  assert.deepEqual(hostsFromShownotes('Heute geht es um Hosting bei Cloud-Anbietern.'), []);
+  assert.deepEqual(hostsFromShownotes('Host der Sendung ist heute leider krank'), []);
 });

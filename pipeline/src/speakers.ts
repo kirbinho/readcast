@@ -43,7 +43,8 @@ export async function nameSpeakers(meta: EpisodeMeta, segments: Segment[], stats
 
 Regeln:
 - Vergib einen Namen nur, wenn er in den Shownotes, im Feed, im Folgentitel oder im Gespräch steht und klar dieser Stimme gehört (sie stellt sich vor, wird mit Namen angesprochen oder begrüßt, oder die Shownotes nennen genau diese Rolle).
-- Rate nie. Ohne klaren Beleg: name = null, quelle = "keine".
+- Nennen die Shownotes genau einen Host, gehört dieser Name der Stimme, die durch die Folge führt.
+- Rate sonst nie. Ohne klaren Beleg: name = null, quelle = "keine".
 - beleg: die Fundstelle wörtlich, kurz.
 - rolle: Entscheidend ist, wer wirklich an diesem Gespräch teilnimmt.
   host: führt durch die Folge. Steht in den Shownotes nur ein Host, gibt es genau einen.
@@ -86,6 +87,15 @@ Regeln:
     };
   });
 
+  // Nennen die Shownotes genau einen Host, ist das die Stimme, die durch die Folge führt
+  const hosts = hostsFromShownotes(meta.description);
+  const lead = speakers[0];
+  if (hosts.length === 1 && lead && !lead.name && !speakers.some((s) => s.name === hosts[0])) {
+    lead.name = hosts[0];
+    lead.short = hosts[0];
+    lead.source = 'shownotes';
+  }
+
   // Kurzname: Nachname, außer zwei Stimmen teilen ihn
   const lastNames = speakers.map((s) => s.name?.split(/\s+/).pop() ?? null);
   speakers.forEach((s, i) => {
@@ -99,6 +109,19 @@ Regeln:
 /** So heißt eine Stimme im Text: Name, sonst „Einspieler“ oder „Stimme B“. */
 export function displayName(s: Speaker): string {
   return s.name ?? (s.role === 'sonstige' ? 'Einspieler' : `Stimme ${s.label}`);
+}
+
+/**
+ * Liest die Moderation aus den Shownotes, etwa „Host: Khesrau Behroz“ oder „Moderation: A und B“.
+ * Zeilen zur Produktion zählen nicht.
+ */
+export function hostsFromShownotes(description: string): string[] {
+  const line = description.match(/^\s*(?:hosts?|moderation|moderiert von|hosted by|presented by|von und mit)\s*:?\s+(.+)$/im)?.[1];
+  if (!line) return [];
+  return line
+    .split(/,|&|\bund\b|\band\b/)
+    .map((n) => n.trim().replace(/[.;]$/, ''))
+    .filter((n) => /^\p{Lu}[\p{L}'’-]+(?:\s+\p{Lu}?[\p{L}'’.-]+){1,3}$/u.test(n));
 }
 
 const MIN_SHORT_TURNS = 3;

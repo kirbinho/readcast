@@ -38,7 +38,7 @@ export async function verifyItems<T extends Item>(label: string, items: T[], seg
 
 Für jeden Satz:
 - gestuetzt: Alles im Satz steht so in den Belegen. Zuschreibungen stimmen (wer hat es gesagt), Zahlen stimmen, eine Meinung wird nicht als Tatsache ausgegeben.
-- teilweise: Der Kern ist belegt, aber etwas ist zugespitzt, falsch zugeschrieben, verallgemeinert oder hinzugefügt. korrektur: derselbe Satz, nur auf das Belegte zurückgeschnitten.
+- teilweise: Der Kern ist belegt, aber etwas ist zugespitzt, falsch zugeschrieben, verallgemeinert oder hinzugefügt. Das gilt auch für ein Geschlecht, das die Belege nicht ausdrücklich nennen, etwa „die Sprecherin“ oder „er“: Ersetze es durch den Namen oder eine neutrale Form. korrektur: derselbe Satz, nur auf das Belegte zurückgeschnitten.
 - nicht: Der Kern ist nicht belegt.
 korrektur ist bei gestuetzt und nicht leer.`,
     user: fence('saetze', listing),

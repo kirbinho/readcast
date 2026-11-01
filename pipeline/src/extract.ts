@@ -92,6 +92,7 @@ Jede Zeile des Transkripts beginnt mit [Abschnitt | Minute | Stimme]. „Einspie
    thema: bei inhalt und hoererfrage ein kurzes Etikett in höchstens sechs Wörtern (gleiches Thema = gleiches Etikett), sonst "".
 
 2. aussagen: Alle inhaltlichen Aussagen aus inhalt- und hoererfrage-Bereichen als einzelne, für sich verständliche Sätze auf Deutsch, auch wenn das Gespräch englisch ist.
+   - Leite nie ein Geschlecht ab, weder aus Name noch aus Stimme noch aus Rolle. Keine Wörter wie „Sprecherin“, „Moderator“, „er“ oder „sie“ für eine Person, außer die Folge nennt es ausdrücklich. Nenne die Person beim Namen, ohne Namen schreib „Host“ oder „Gast“ ohne Artikel.
    - Eine Aussage pro Eintrag. Treu am Gesagten: nichts zuspitzen, nichts schlussfolgern, keine Wertung hinzufügen, Zahlen exakt übernehmen. Meinungen bleiben als Meinung erkennbar.
    - kontext: das Mindeste, das man braucht, um die Aussage richtig zu verstehen (z. B. worauf sie antwortet). Sonst "".
    - stimme: die Stimme, die es sagt, so wie sie im Transkript steht.

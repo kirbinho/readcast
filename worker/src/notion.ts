@@ -8,7 +8,7 @@ import { HttpError, type Env } from './http.ts';
 import type { EpisodeRow } from './store.ts';
 
 const API = 'https://api.notion.com/v1';
-const VERSION = '2025-09-03';
+const VERSION = '2026-03-11';
 const UNDO_BATCH = 40; // Löschungen je Anfrage, wegen der Grenze für Unteranfragen
 
 type NBlock = Record<string, unknown>;
@@ -19,7 +19,12 @@ async function notion<T>(env: Env, method: string, path: string, body?: unknown)
     headers: { authorization: `Bearer ${env.NOTION_TOKEN}`, 'notion-version': VERSION, 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  if (!res.ok) throw new HttpError(502, `Notion hat abgelehnt (${res.status}).`);
+  if (!res.ok) {
+    // Notions Begründung nennt das betroffene Feld. Sie geht nur an die angemeldete Person und ins private Protokoll.
+    const detail = ((await res.json().catch(() => ({}))) as { code?: string; message?: string });
+    console.error(`Notion ${res.status} ${detail.code ?? ''}: ${detail.message ?? ''}`);
+    throw new HttpError(502, `Notion hat abgelehnt (${res.status}): ${(detail.message ?? 'ohne Begründung').slice(0, 300)}`);
+  }
   return (await res.json()) as T;
 }
 
