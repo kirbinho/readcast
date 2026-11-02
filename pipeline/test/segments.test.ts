@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import type { Speaker } from '../../shared/src/types.ts';
 import { toSegments, voiceStats } from '../src/segments.ts';
-import { decideRole, hostsFromShownotes, mergeSameNames } from '../src/speakers.ts';
+import { applyCast, decideRole, hostsFromShownotes, mergeSameNames } from '../src/speakers.ts';
 import type { Utterance } from '../src/transcribe.ts';
 
 test('lange Äußerungen werden an Satzenden geschnitten', () => {
@@ -37,12 +38,13 @@ test('zwei Kennungen mit demselben Namen werden eine Stimme', () => {
 });
 
 test('Einspieler zählen nicht als Gesprächspartner', () => {
-  const v = (shortTurns: number, significant = true) => ({ label: 'B', ms: 1, share: 0.1, significant, turns: shortTurns, shortTurns });
+  const v = (shortTurns: number, significant = true, turns = shortTurns) => ({ label: 'B', ms: 1, share: 0.1, significant, turns, shortTurns, questionShare: 0 });
   assert.equal(decideRole(v(0), true, 'sonstige'), 'host', 'die lauteste Stimme führt durch die Folge');
   assert.equal(decideRole(v(1), false, 'sonstige'), 'sonstige', 'Konferenzredner');
   assert.equal(decideRole(v(1), false, 'gast'), 'sonstige', 'kein Wechsel im Gespräch, also kein Gast');
   assert.equal(decideRole(v(12), false, 'gast'), 'gast', 'echter Gesprächspartner');
   assert.equal(decideRole(v(12, false), false, 'gast'), 'sonstige', 'zu wenig Sprechzeit');
+  assert.equal(decideRole(v(0, true, 8), false, 'gast'), 'gast', 'Gast mit langen Antworten, aber immer wieder im Gespräch');
 });
 
 test('Kurze Wechsel werden gezählt, lange Blöcke nicht', () => {
@@ -59,4 +61,32 @@ test('Host aus den Shownotes', () => {
   assert.deepEqual(hostsFromShownotes('Executive Producer: Tobias Bauckhage'), []);
   assert.deepEqual(hostsFromShownotes('Heute geht es um Hosting bei Cloud-Anbietern.'), []);
   assert.deepEqual(hostsFromShownotes('Host der Sendung ist heute leider krank'), []);
+});
+
+const stat = (label: string, ms: number, questionShare: number) => ({ label, ms, share: 0.5, significant: true, turns: 40, shortTurns: 10, questionShare });
+const voice = (label: string): Speaker => ({ label, name: null, short: `Stimme ${label}`, role: 'gast', source: null, shareOfTalk: 0.5 });
+
+test('Interview: Wer fragt, ist der Host, auch wenn der Gast mehr redet', () => {
+  const speakers = [voice('A'), voice('B')];
+  applyCast(speakers, [stat('A', 2_000_000, 0.05), stat('B', 700_000, 0.8)], [{ name: 'Rainer Esser', rolle: 'host' }, { name: 'Christian Sewing', rolle: 'gast' }]);
+  assert.deepEqual(speakers.map((s) => [s.name, s.role]), [['Christian Sewing', 'gast'], ['Rainer Esser', 'host']]);
+});
+
+test('Ein Host ohne Gast ist die lauteste Stimme, Einspieler bleiben unbenannt', () => {
+  const speakers = [voice('A'), { ...voice('B'), role: 'sonstige' as const }];
+  applyCast(speakers, [stat('A', 2_000_000, 0.1), stat('B', 100_000, 0.2)], [{ name: 'Khesrau Behroz', rolle: 'host' }]);
+  assert.equal(speakers[0].name, 'Khesrau Behroz');
+  assert.equal(speakers[1].name, null);
+});
+
+test('Was das Modell sicher zugeordnet hat, bleibt bestehen', () => {
+  const speakers = [{ ...voice('A'), name: 'Rainer Esser', role: 'host' as const }, voice('B')];
+  applyCast(speakers, [stat('A', 1, 0.8), stat('B', 1, 0.1)], [{ name: 'Rainer Esser', rolle: 'host' }, { name: 'Christian Sewing', rolle: 'gast' }]);
+  assert.equal(speakers[1].name, 'Christian Sewing');
+});
+
+test('Zwei Gäste lassen sich nicht zuordnen', () => {
+  const speakers = [voice('A'), voice('B'), voice('C')];
+  applyCast(speakers, [stat('A', 3, 0.8), stat('B', 2, 0.1), stat('C', 1, 0.1)], [{ name: 'Anna Beispiel', rolle: 'gast' }, { name: 'Bert Muster', rolle: 'gast' }]);
+  assert.ok(speakers.every((s) => s.name === null));
 });

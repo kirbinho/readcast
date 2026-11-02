@@ -34,8 +34,8 @@ Grobe Schätzung pro Folge, noch nicht an echten Folgen gemessen:
 
 | Länge | Transkription | Auswertung (Claude Sonnet 5.5) | Zusammen |
 |---|---|---|---|
-| 20 Minuten | 0,08 $ | ca. 0,14 $ | ca. 0,22 $ |
-| 90 Minuten | 0,35 $ | ca. 0,62 $ | ca. 0,97 $ |
+| 20 Minuten | 0,08 $ | ca. 0,16 $ | ca. 0,24 $ |
+| 90 Minuten | 0,35 $ | ca. 0,70 $ | ca. 1,05 $ |
 
 Für die Pipeline lässt sich das Modell ohne Codeänderung wechseln: Repository-Variable `READCAST_MODEL`, etwa `claude-opus-5-5`. „Frag die Folge“ nutzt `CLAUDE_MODEL` aus `shared/src/prices.ts`.
 

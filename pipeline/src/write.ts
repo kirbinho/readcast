@@ -56,7 +56,7 @@ function firstTs(sentences: Sentence[], segById: Map<string, Segment>): number {
 /** Länge folgt dem Gewicht: großes Thema, mehr Sätze. */
 function sentenceBudget(t: ScoredTopic, top: number): string {
   const rel = top ? t.score / top : 1;
-  return rel > 0.8 ? '4 bis 6 Sätze' : rel > 0.55 ? '3 bis 5 Sätze' : '2 bis 4 Sätze';
+  return rel > 0.8 ? '6 bis 9 Sätze' : rel > 0.55 ? '5 bis 7 Sätze' : '3 bis 5 Sätze';
 }
 
 export async function writeEssenz(
@@ -69,12 +69,12 @@ export async function writeEssenz(
   const top = main[0]?.score ?? 1;
   const sections = [
     ...main.map((t, i) => {
-      const claims = pickClaims(t.claims, 14);
+      const claims = pickClaims(t.claims, 20);
       return `## ${t.topic.id} · Schwerpunkt ${i + 1} · ${t.topic.title} · Umfang: ${sentenceBudget(t, top)}\n${claimLines(claims, names)}`;
     }),
-    ...shorts.map((t) => `## ${t.topic.id} · Kurzmeldung · ${t.topic.title} · Umfang: 1 bis 3 Sätze, höchstens 150 Wörter\n${claimLines(pickClaims(t.claims, 5), names)}`),
+    ...shorts.map((t) => `## ${t.topic.id} · Kurzmeldung · ${t.topic.title} · Umfang: 2 bis 4 Sätze, höchstens 150 Wörter\n${claimLines(pickClaims(t.claims, 5), names)}`),
   ];
-  const used = [...main, ...shorts].flatMap((t) => pickClaims(t.claims, 14));
+  const used = [...main, ...shorts].flatMap((t) => pickClaims(t.claims, 20));
   const res = await callJson({
     stage: 'Essenz',
     effort: 'medium',
@@ -82,7 +82,7 @@ export async function writeEssenz(
     schema: EssenzSchema,
     system: `Du schreibst die Essenz einer Podcastfolge. Welche Themen hineingehören und in welcher Reihenfolge, ist bereits entschieden: Halte Reihenfolge und Umfang genau ein. Lass kein Thema weg und füge keins hinzu. ${UNTRUSTED_NOTE}
 
-Je Schwerpunkt ein Block (bloecke), je Kurzmeldung ein Eintrag (kurzmeldungen), jeweils mit der Themen-ID in thema. Ein Block bündelt die tragenden Aussagen seines Themas zu einem lesbaren Absatz. Stützen sich Aussagen gegenseitig oder widersprechen sich die Stimmen, mach das sichtbar.
+Je Schwerpunkt ein Block (bloecke), je Kurzmeldung ein Eintrag (kurzmeldungen), jeweils mit der Themen-ID in thema. Ein Block gibt sein Thema so wieder, dass man es ohne die Folge versteht: die tragenden Aussagen samt Begründungen, Beispielen und Zahlen aus dem Material. Schöpfe den Umfang aus, solange das Material ihn hergibt, und fülle nie auf. Stützen sich Aussagen gegenseitig oder widersprechen sich die Stimmen, mach das sichtbar.
 
 ${WRITING_RULES}`,
     user: [fence('themen', sections.join('\n\n')), fence('originalstellen', sourceFor(used, segments, names))].join('\n\n'),

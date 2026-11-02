@@ -43,6 +43,7 @@ export interface VoiceStat {
   significant: boolean;
   turns: number; // Redebeiträge
   shortTurns: number; // kurze Beiträge im Wechsel mit anderen, typisch für ein echtes Gespräch
+  questionShare: number; // Anteil der Redebeiträge mit einer Frage, in Interviews das Zeichen des Hosts
 }
 
 const SHORT_TURN_MS = 30_000;
@@ -59,12 +60,14 @@ export function voiceStats(segments: Segment[]): VoiceStat[] {
   // Aufeinanderfolgende Abschnitte derselben Stimme sind ein Redebeitrag
   const turns = new Map<string, number>();
   const shortTurns = new Map<string, number>();
+  const questionTurns = new Map<string, number>();
   for (let i = 0; i < segments.length; ) {
     let j = i;
     while (j + 1 < segments.length && segments[j + 1].spk === segments[i].spk) j++;
     const spk = segments[i].spk;
     turns.set(spk, (turns.get(spk) ?? 0) + 1);
     if (segments[j].end - segments[i].start <= SHORT_TURN_MS) shortTurns.set(spk, (shortTurns.get(spk) ?? 0) + 1);
+    if (segments.slice(i, j + 1).some((s) => s.text.includes('?'))) questionTurns.set(spk, (questionTurns.get(spk) ?? 0) + 1);
     i = j + 1;
   }
   return [...ms.entries()]
@@ -75,6 +78,7 @@ export function voiceStats(segments: Segment[]): VoiceStat[] {
       significant: v / total >= 0.03 || v >= 90_000,
       turns: turns.get(label) ?? 0,
       shortTurns: shortTurns.get(label) ?? 0,
+      questionShare: (questionTurns.get(label) ?? 0) / (turns.get(label) || 1),
     }))
     .sort((a, b) => b.ms - a.ms);
 }

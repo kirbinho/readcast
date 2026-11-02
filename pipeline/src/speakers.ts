@@ -8,6 +8,7 @@ import { UNTRUSTED_NOTE, callJson, fence } from './claude.ts';
 import { renderTranscript, type VoiceStat } from './segments.ts';
 
 const Schema = z.object({
+  besetzung: z.array(z.object({ name: z.string(), rolle: z.enum(['host', 'gast']) })),
   stimmen: z.array(
     z.object({
       label: z.string(),
@@ -42,6 +43,7 @@ export async function nameSpeakers(meta: EpisodeMeta, segments: Segment[], stats
     system: `Du ordnest den Stimmen eines Podcasts Namen zu. ${UNTRUSTED_NOTE}
 
 Regeln:
+- besetzung: alle, die laut Folgentitel, Shownotes oder Autor im Feed an diesem Gespräch teilnehmen, mit rolle host oder gast, auch wenn du sie noch keiner Stimme zuordnen kannst. Beispiel: „Christian Sewing im Gespräch mit Rainer Esser“ in einer Reihe, in der Rainer Esser spricht, ergibt Esser als host und Sewing als gast. Nicht dazu gehören Personen, über die nur gesprochen wird, die Produktion und Einspieler.
 - Vergib einen Namen nur, wenn er in den Shownotes, im Feed, im Folgentitel oder im Gespräch steht und klar dieser Stimme gehört (sie stellt sich vor, wird mit Namen angesprochen oder begrüßt, oder die Shownotes nennen genau diese Rolle).
 - Nennen die Shownotes genau einen Host, gehört dieser Name der Stimme, die durch die Folge führt.
 - Rate sonst nie. Ohne klaren Beleg: name = null, quelle = "keine".
@@ -87,6 +89,11 @@ Regeln:
     };
   });
 
+  applyCast(speakers, stats, res.besetzung.filter((c) => {
+    const last = normalizeForMatch(c.name).split(' ').filter((t) => t.length >= 3).pop();
+    return !!last && corpus.includes(last);
+  }));
+
   // Nennen die Shownotes genau einen Host, ist das die Stimme, die durch die Folge führt
   const hosts = hostsFromShownotes(meta.description);
   const lead = speakers[0];
@@ -125,15 +132,55 @@ export function hostsFromShownotes(description: string): string[] {
 }
 
 const MIN_SHORT_TURNS = 3;
+const MIN_TURNS = 6;
 
 /**
- * Gesprächspartner ist nur, wer laut Einschätzung Host oder Gast ist und auch wirklich im Wechsel mit anderen spricht.
+ * Gesprächspartner ist nur, wer laut Einschätzung Host oder Gast ist und auch wirklich im Wechsel mit anderen spricht:
+ * oft kurz oder, wie Gäste mit langen Antworten, immer wieder.
  * Die lauteste Stimme führt immer durch die Folge. Alles andere sind Einspieler: Konferenzredner, O-Töne, Archivmaterial, Werbung.
  */
 export function decideRole(v: VoiceStat, isLoudest: boolean, modelRole: Speaker['role'] | undefined): Speaker['role'] {
   if (isLoudest) return modelRole === 'gast' || modelRole === 'host' ? modelRole : 'host';
   if (!v.significant || (modelRole !== 'host' && modelRole !== 'gast')) return 'sonstige';
-  return v.shortTurns >= MIN_SHORT_TURNS ? modelRole : 'sonstige';
+  return v.shortTurns >= MIN_SHORT_TURNS || v.turns >= MIN_TURNS ? modelRole : 'sonstige';
+}
+
+/**
+ * Trägt die Besetzung aus Shownotes und Titel ein, wenn die Zuordnung zur Stimme offen blieb.
+ * Das Gespräch verrät die Rollen: Der Host fragt, der Gast antwortet.
+ * Mit mehr als einem Host oder Gast gibt es diesen eindeutigen Schluss nicht, dann bleibt es bei der Einschätzung.
+ */
+export function applyCast(speakers: Speaker[], stats: VoiceStat[], cast: { name: string; rolle: 'host' | 'gast' }[]): void {
+  const taken = new Set(speakers.flatMap((s) => (s.name ? [normalizeForMatch(s.name)] : [])));
+  const open = cast.filter((c) => !taken.has(normalizeForMatch(c.name)));
+  const hosts = open.filter((c) => c.rolle === 'host');
+  const guests = open.filter((c) => c.rolle === 'gast');
+  if (hosts.length > 1 || guests.length > 1) return;
+  const statOf = new Map(stats.map((v) => [v.label, v]));
+  const free = speakers.filter((s) => !s.name && statOf.get(s.label)?.significant);
+  const put = (s: Speaker | undefined, name: string, role: Speaker['role']) => {
+    if (!s) return;
+    s.name = name;
+    s.short = name;
+    s.role = role;
+    s.source = 'shownotes';
+  };
+  if (hosts.length === 1 && guests.length === 1) {
+    // Die beiden Stimmen mit der meisten Sprechzeit führen das Gespräch, wer mehr fragt, ist der Host
+    const [a, b] = [...free].sort((x, y) => statOf.get(y.label)!.ms - statOf.get(x.label)!.ms);
+    if (!a || !b) return;
+    const aAsks = statOf.get(a.label)!.questionShare >= statOf.get(b.label)!.questionShare;
+    put(aAsks ? a : b, hosts[0].name, 'host');
+    put(aAsks ? b : a, guests[0].name, 'gast');
+  } else if (hosts.length === 1) {
+    const named = speakers.some((s) => s.name && s.role === 'gast');
+    // Steht der Gast schon fest, ist der Host die verbleibende Stimme mit den meisten Fragen, sonst die lauteste
+    const pick = named ? [...free].sort((x, y) => statOf.get(y.label)!.questionShare - statOf.get(x.label)!.questionShare)[0] : free[0];
+    put(pick, hosts[0].name, 'host');
+  } else if (guests.length === 1) {
+    const pick = [...free].sort((x, y) => statOf.get(x.label)!.questionShare - statOf.get(y.label)!.questionShare)[0];
+    put(pick, guests[0].name, 'gast');
+  }
 }
 
 /**
